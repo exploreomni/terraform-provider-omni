@@ -15,6 +15,10 @@ import (
 
 func pathRoot(name string) path.Path { return path.Root(name) }
 
+// pathExpr builds a root path expression, which is what schema-level validators
+// take (as opposed to the path.Path that diagnostics and state accessors use).
+func pathExpr(name string) path.Expression { return path.MatchRoot(name) }
+
 // clientFromResourceRequest pulls the configured API client out of a resource
 // Configure request.
 func clientFromResourceRequest(req resource.ConfigureRequest, resp *resource.ConfigureResponse) *client.Client {

@@ -17,11 +17,6 @@ type Connection struct {
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 	DeletedAt     string `json:"deletedAt"`
-
-	UserAttributeNameForConnectionEnvironments   string `json:"userAttributeNameForConnectionEnvironments"`
-	UserAttributeValuesForDefaultEnvironment     string `json:"userAttributeValuesForDefaultEnvironment"`
-	BranchConnectionEnvironmentOverridesUserAttr bool   `json:"branchConnectionEnvironmentOverridesUserAttr"`
-	EnvironmentConnectionSwitchesSchemaModel     bool   `json:"environmentConnectionSwitchesSchemaModel"`
 }
 
 // ConnectionInput is the create body for POST /v1/connections. Optional fields

@@ -148,7 +148,7 @@ func (r *userModelRoleResource) Schema(_ context.Context, _ resource.SchemaReque
 
 func (r *userModelRoleResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
-		resourcevalidator.AtLeastOneOf(pathRoot("model_id"), pathRoot("connection_id")),
+		resourcevalidator.AtLeastOneOf(pathExpr("model_id"), pathExpr("connection_id")),
 	}
 }
 
@@ -298,7 +298,7 @@ func (r *userGroupModelRoleResource) Schema(_ context.Context, _ resource.Schema
 
 func (r *userGroupModelRoleResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
 	return []resource.ConfigValidator{
-		resourcevalidator.AtLeastOneOf(pathRoot("model_id"), pathRoot("connection_id")),
+		resourcevalidator.AtLeastOneOf(pathExpr("model_id"), pathExpr("connection_id")),
 	}
 }
 
