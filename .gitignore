@@ -1,0 +1,27 @@
+# Binaries
+terraform-provider-omni
+dist/
+bin/
+
+# Go
+*.test
+*.out
+vendor/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!examples/**/*.tfvars.example
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local dev overrides
+.terraformrc
+terraform.rc

@@ -1,0 +1,72 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test -cover ./internal/...
+
+  # Acceptance tests hit a real Omni instance. They only run when the repo has
+  # OMNI_BASE_URL and OMNI_API_TOKEN secrets configured.
+  acceptance:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+
+      - name: Acceptance tests
+        env:
+          TF_ACC: "1"
+          OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+        run: |
+          if [ -z "$OMNI_BASE_URL" ]; then
+            echo "OMNI_BASE_URL is not set; skipping acceptance tests."
+            exit 0
+          fi
+          go test -v -timeout 30m ./internal/...
