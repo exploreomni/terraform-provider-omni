@@ -30,16 +30,26 @@ jobs:
       # The provider is not published yet, so CI builds it from this repo and
       # points Terraform at the local binary. Once v0.1.0 is on the registry,
       # delete this step and the dev override below.
-      - name: Build provider
+      - name: Build provider into a filesystem mirror
         working-directory: .
         run: |
-          go build -o "${RUNNER_TEMP}/plugins/terraform-provider-omni" .
+          # terraform init always queries the registry, even with dev_overrides,
+          # and this provider is not published yet. A filesystem mirror gives
+          # init a local source that satisfies it. Replace this whole step with
+          # a normal registry install once v0.1.0 is published.
+          VERSION=0.1.0
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
+          mkdir -p "$MIRROR"
+          go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
           cat > ~/.terraformrc <<TFRC
           provider_installation {
-            dev_overrides {
-              "ashima-omni/omni" = "${RUNNER_TEMP}/plugins"
+            filesystem_mirror {
+              path    = "${RUNNER_TEMP}/plugins"
+              include = ["registry.terraform.io/ashima-omni/omni"]
             }
-            direct {}
+            direct {
+              exclude = ["registry.terraform.io/ashima-omni/omni"]
+            }
           }
           TFRC
 
