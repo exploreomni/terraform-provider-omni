@@ -119,6 +119,14 @@ func (c *Client) ListFolders(ctx context.Context, scope, ownerID string) ([]Fold
 // GetFolder finds a folder by ID. The API has no get-by-id route for folders, so
 // this pages the list endpoint and matches on ID.
 func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
+	// ownerID is only sent for restricted scope. For organization scope an
+	// organization API key returns every folder when ownerID is omitted, but
+	// filters to a single user's folders when it is present, which would hide
+	// the folder we are looking for.
+	if scope != "restricted" {
+		ownerID = ""
+	}
+
 	folders, err := c.ListFolders(ctx, scope, ownerID)
 	if err != nil {
 		return nil, err

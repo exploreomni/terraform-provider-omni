@@ -155,6 +155,14 @@ func (r *folderResource) Create(ctx context.Context, req resource.CreateRequest,
 		created.Path = updated.Path
 	}
 
+	// The create response omits url, which only the list endpoint returns. Read
+	// the folder back so computed attributes are populated straight away. This
+	// is best effort: a folder that was created fine should not fail the apply
+	// just because the read-back did not find it.
+	if refreshed, err := r.client.GetFolder(ctx, created.ID, created.Scope, created.OwnerID); err == nil {
+		created = refreshed
+	}
+
 	state := plan
 	applyFolderToState(&state, created)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
