@@ -30,6 +30,12 @@ jobs:
       # The provider is not published yet, so CI builds it from this repo and
       # points Terraform at the local binary. Once v0.1.0 is on the registry,
       # delete this step and the dev override below.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
       - name: Build provider into a filesystem mirror
         working-directory: .
         run: |
@@ -37,11 +43,16 @@ jobs:
           # and this provider is not published yet. A filesystem mirror gives
           # init a local source that satisfies it. Replace this whole step with
           # a normal registry install once v0.1.0 is published.
+          #
+          # This must run AFTER setup-terraform: that action writes its own
+          # ~/.terraformrc for the HCP credentials, so we append to it rather
+          # than being overwritten by it.
           VERSION=0.1.0
           MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
           mkdir -p "$MIRROR"
           go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
-          cat > ~/.terraformrc <<TFRC
+          cat >> ~/.terraformrc <<TFRC
+
           provider_installation {
             filesystem_mirror {
               path    = "${RUNNER_TEMP}/plugins"
@@ -52,12 +63,8 @@ jobs:
             }
           }
           TFRC
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.9.*"
-          terraform_wrapper: false
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          echo "--- ~/.terraformrc ---"
+          sed 's/token *= *".*"/token = "REDACTED"/' ~/.terraformrc
 
       - name: Init
         env:
