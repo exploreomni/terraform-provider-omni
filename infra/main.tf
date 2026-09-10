@@ -35,3 +35,7 @@ resource "omni_folder" "finance" {
 resource "omni_user_group" "finance" {
   display_name = "Finance"
 }
+resource "omni_folder" "marketing" {
+  name = "Marketing"
+  path = "marketing"
+}
