@@ -43,8 +43,16 @@ type Meta struct {
 	LastModified string `json:"lastModified,omitempty"`
 }
 
+// SCIM schema URNs. PUT replaces the whole resource and the spec requires the
+// schemas attribute on it; POST is accepted without one.
+const (
+	scimUserSchema  = "urn:ietf:params:scim:schemas:core:2.0:User"
+	scimGroupSchema = "urn:ietf:params:scim:schemas:core:2.0:Group"
+)
+
 // UserInput is the create/replace body for a user.
 type UserInput struct {
+	Schemas        []string       `json:"schemas,omitempty"`
 	UserName       string         `json:"userName"`
 	DisplayName    string         `json:"displayName"`
 	UserAttributes map[string]any `json:"urn:omni:params:1.0:UserAttribute,omitempty"`
@@ -67,6 +75,7 @@ type GroupMembr struct {
 
 // GroupInput is the create/replace body for a group.
 type GroupInput struct {
+	Schemas     []string     `json:"schemas,omitempty"`
 	DisplayName string       `json:"displayName"`
 	Members     []GroupMembr `json:"members"`
 }
@@ -96,6 +105,10 @@ func (c *Client) GetUser(ctx context.Context, id string) (*User, error) {
 
 // ReplaceUser applies a SCIM PUT, replacing the whole resource.
 func (c *Client) ReplaceUser(ctx context.Context, id string, in UserInput) (*User, error) {
+	if len(in.Schemas) == 0 {
+		in.Schemas = []string{scimUserSchema}
+	}
+
 	var out User
 	if err := c.Put(ctx, "/scim/v2/users/"+url.PathEscape(id), in, &out); err != nil {
 		return nil, err
@@ -150,6 +163,10 @@ func (c *Client) GetGroup(ctx context.Context, id string) (*Group, error) {
 
 // ReplaceGroup applies a SCIM PUT, replacing name and membership.
 func (c *Client) ReplaceGroup(ctx context.Context, id string, in GroupInput) (*Group, error) {
+	if len(in.Schemas) == 0 {
+		in.Schemas = []string{scimGroupSchema}
+	}
+
 	var out Group
 	if err := c.Put(ctx, "/scim/v2/groups/"+url.PathEscape(id), in, &out); err != nil {
 		return nil, err
