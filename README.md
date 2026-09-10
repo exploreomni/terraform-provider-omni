@@ -55,13 +55,165 @@ resource "omni_folder" "finance" {
 More in [`examples/`](./examples), including an end-to-end setup in
 [`examples/complete`](./examples/complete).
 
+## Documentation
+
+| | |
+| --- | --- |
+| [docs/USAGE.md](./docs/USAGE.md) | Installation and per-resource guide, for both registry and from-source use |
+| [docs/TEST-REPORT.md](./docs/TEST-REPORT.md) | What has been verified against a live instance, and what has not |
+| [docs/TEST-CASES.md](./docs/TEST-CASES.md) | The test case matrix |
+
+
+## Setting up CI/CD
+
+The workflows in this repo plan on pull request and apply on merge, behind an
+approval gate. Four things to set up before that works.
+
+### 1. Choose where state lives
+
+CI runners are ephemeral. With local state, every run starts from nothing and
+recreates every resource it has already created. A remote backend is not
+optional for apply-on-merge.
+
+Terraform state also stores `omni_connection.password` in plain text. Whatever
+you pick, treat it as secret material.
+
+**HCP Terraform** is free, needs no card, and stores state with locking and
+versioning. Set the workspace to **Execution Mode: Local**, so GitHub Actions
+runs Terraform and HCP only holds state. Remote execution would try to install
+the provider from the registry, which fails while it is unpublished.
+
+```hcl
+terraform {
+  cloud {
+    organization = "your-org"
+    workspaces { name = "omni-playground" }
+  }
+}
+```
+
+Then add a `TF_API_TOKEN` secret from **app.terraform.io > User settings >
+Tokens**. The `setup-terraform` action picks it up automatically.
+
+**GCS**, if you already have a GCP project. Turn on object versioning, because
+state corruption is recoverable with prior versions and unrecoverable without.
+
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "omni-tf-state"
+    prefix = "playground"
+  }
+}
+```
+
+```bash
+gcloud storage buckets update gs://omni-tf-state --versioning
+```
+
+Authenticate CI with `google-github-actions/auth`. Workload Identity Federation
+is preferable to a service account key, since the key is a long-lived
+credential with write access to state.
+
+**S3**, with `use_lockfile = true` for locking:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket       = "omni-tf-state"
+    key          = "playground/terraform.tfstate"
+    region       = "ap-southeast-2"
+    use_lockfile = true
+  }
+}
+```
+
+**Cloudflare R2** works through the `s3` backend and has a free tier with no
+card. It needs endpoint overrides:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket    = "omni-tf-state"
+    key       = "playground/terraform.tfstate"
+    region    = "auto"
+    endpoints = { s3 = "https://<account-id>.r2.cloudflarestorage.com" }
+
+    skip_credentials_validation = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+    use_path_style              = true
+  }
+}
+```
+
+Do not commit state to the repo. This repo is public, and state contains
+warehouse credentials in plain text.
+
+### 2. Add repository secrets
+
+**Settings > Secrets and variables > Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `OMNI_BASE_URL` | `https://yourinstance.omniapp.co` |
+| `OMNI_API_TOKEN` | An Omni organization API key |
+| `TF_API_TOKEN` | HCP Terraform token, if using the `cloud` backend |
+| Backend credentials | Whatever your bucket needs, for example `GCP_SA_KEY` or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` |
+
+Use an **organization API key**, not a personal access token. The SCIM
+endpoints behind `omni_user` and `omni_user_group` reject personal tokens.
+
+Generate it in Omni under **Settings > API keys**. If a token is ever pasted
+somewhere it should not be, rotate it there rather than trying to scrub it.
+
+### 3. Create the approval environment
+
+**Settings > Environments > New environment**, named `omni-playground` to match
+the workflows.
+
+Add yourself under **Required reviewers**. A merge then queues the apply and
+waits for a human to approve it in the Actions tab before anything touches the
+instance.
+
+Two settings worth a look:
+
+- *Allow administrators to bypass protection rules* is on by default. If you
+  are an admin, you can skip your own gate. Turn it off if the gate should be
+  real.
+- *Prevent self-review* should stay off when you are the only reviewer, or
+  nobody can ever approve.
+
+### 4. Point the config at your instance
+
+Edit `infra/main.tf`. As shipped it creates a couple of folders and a group as
+a worked example. Replace that with what you actually want managed.
+
+Then open a pull request. The plan workflow comments the plan on the PR; merging
+queues the apply for approval.
+
+### Local setup
+
+For running Terraform from your own machine rather than CI:
+
+```bash
+export OMNI_BASE_URL=https://yourinstance.omniapp.co
+export OMNI_API_TOKEN=...
+```
+
+See [docs/USAGE.md](./docs/USAGE.md) section 2 for installing the provider from
+source, which is needed until it is published to the registry.
+
 ## Authentication
 
 Generate a token under **Settings > API keys** in Omni.
 
 - Organization API keys work for every resource, including users and groups.
-- Personal access tokens work for connections, models, model YAML, folders, and role assignments,
-  but the SCIM user and group endpoints reject them.
+- Personal access tokens work for connections, models, folders, and role
+  assignments, but the SCIM user and group endpoints reject them.
+
+Supply them as `OMNI_BASE_URL` and `OMNI_API_TOKEN` rather than putting them in
+configuration.
 
 ## Local development
 
