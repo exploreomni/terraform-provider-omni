@@ -89,9 +89,11 @@ jobs:
             echo "FAIL: config validated when it should have been rejected"; exit 1
           fi
           cat err.txt
-          grep -qi "model_id\|connection_id" err.txt \
-            && echo "PASS: rejected before any API call" \
-            || { echo "FAIL: rejected for the wrong reason"; exit 1; }
+          if grep -qi "model_id\|connection_id" err.txt; then
+            echo "PASS: rejected before any API call"
+          else
+            echo "FAIL: rejected for the wrong reason"; exit 1
+          fi
 
       - name: TC-31 invalid dialect is rejected with the allowed values
         run: |
@@ -111,9 +113,11 @@ jobs:
             echo "FAIL: invalid dialect accepted"; exit 1
           fi
           cat err.txt
-          grep -qi "snowflake" err.txt \
-            && echo "PASS: rejected and the allowed values were listed" \
-            || { echo "FAIL: message did not list valid dialects"; exit 1; }
+          if grep -qi "snowflake" err.txt; then
+            echo "PASS: rejected and the allowed values were listed"
+          else
+            echo "FAIL: message did not list valid dialects"; exit 1
+          fi
 
       - name: TC-29 an invalid token fails cleanly with no state written
         run: |
@@ -181,9 +185,11 @@ jobs:
           terraform plan -detailed-exitcode -var "folder_name=${FOLDER}" -out=/dev/null
           code=$?
           set -e
-          [ $code -eq 2 ] \
-            && echo "PASS: drift detected and a correction proposed" \
-            || { echo "FAIL: expected exit code 2, got $code"; exit 1; }
+          if [ $code -eq 2 ]; then
+            echo "PASS: drift detected and a correction proposed"
+          else
+            echo "FAIL: expected exit code 2, got $code"; exit 1
+          fi
 
           terraform apply -auto-approve -var "folder_name=${FOLDER}" >/dev/null
           echo "corrected back to ${FOLDER}"
@@ -197,9 +203,11 @@ jobs:
           terraform plan -detailed-exitcode -var "folder_name=${FOLDER}" -out=/dev/null
           code=$?
           set -e
-          [ $code -eq 0 ] \
-            && echo "PASS: imported state matches configuration" \
-            || { echo "FAIL: plan after import was not clean (exit $code)"; exit 1; }
+          if [ $code -eq 0 ]; then
+            echo "PASS: imported state matches configuration"
+          else
+            echo "FAIL: plan after import was not clean (exit $code)"; exit 1
+          fi
 
       - name: TC-33 a resource deleted outside Terraform is removed from state
         run: |
@@ -211,9 +219,11 @@ jobs:
           terraform plan -detailed-exitcode -var "folder_name=${FOLDER}" -out=/dev/null
           code=$?
           set -e
-          [ $code -eq 2 ] \
-            && echo "PASS: dropped from state and a recreate proposed" \
-            || { echo "FAIL: expected exit code 2, got $code"; exit 1; }
+          if [ $code -eq 2 ]; then
+            echo "PASS: dropped from state and a recreate proposed"
+          else
+            echo "FAIL: expected exit code 2, got $code"; exit 1
+          fi
 
       - name: TC-22 a non-empty folder will not delete without the recursive flag
         run: |
@@ -252,9 +262,12 @@ jobs:
             echo "Edge run 1 showed the API returns 400 here, so this is a change in behaviour."
             CLEANUP_FAILED=1
           else
-            grep -qi "only empty folders" err.txt \
-              && echo "PASS: destroy refused with the documented message" \
-              || { echo "FAIL: destroy failed, but not for the documented reason"; CLEANUP_FAILED=1; }
+            if grep -qi "only empty folders" err.txt; then
+              echo "PASS: destroy refused with the documented message"
+            else
+              echo "FAIL: destroy failed, but not for the documented reason"
+              CLEANUP_FAILED=1
+            fi
           fi
 
           # Clean up before reporting, so a failure never leaves the folder behind.
@@ -309,8 +322,11 @@ jobs:
           terraform plan -detailed-exitcode -var 'v=first' -out=/dev/null
           code=$?
           set -e
-          [ $code -eq 0 ] && echo "PASS: attribute round-trips with no drift" \
-                          || { echo "FAIL: drift on the attribute (exit $code)"; exit 1; }
+          if [ $code -eq 0 ]; then
+            echo "PASS: attribute round-trips with no drift"
+          else
+            echo "FAIL: drift on the attribute (exit $code)"; exit 1
+          fi
 
           terraform apply -auto-approve -var 'v=second' >/dev/null
           echo "PASS TC-13b: attribute value changed in place"
@@ -347,9 +363,11 @@ jobs:
             "$OMNI_BASE_URL/api/scim/v2/groups/${GID}" \
           | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('members') or []))")
 
-          [ "$COUNT" = "0" ] \
-            && echo "PASS: membership emptied, group survives" \
-            || { echo "FAIL: group still reports $COUNT members"; exit 1; }
+          if [ "$COUNT" = "0" ]; then
+            echo "PASS: membership emptied, group survives"
+          else
+            echo "FAIL: group still reports $COUNT members"; exit 1
+          fi
 
           terraform destroy -auto-approve -var 'keep_member=false' >/dev/null
 
@@ -395,16 +413,21 @@ jobs:
           terraform plan -detailed-exitcode -var 'base_role=NO_ACCESS' -var 'host=db.invalid.example' -out=/dev/null
           rc=$?
           set -e
-          [ $rc -eq 0 ] && echo "PASS: connection reads back with no drift" \
-                       || { echo "FAIL: drift after create (exit $rc)"; exit 1; }
+          if [ $rc -eq 0 ]; then
+            echo "PASS: connection reads back with no drift"
+          else
+            echo "FAIL: drift after create (exit $rc)"; exit 1
+          fi
 
           terraform apply -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
           echo "PASS TC-18b: base_role changed in place"
 
-          terraform plan -no-color -var 'base_role=QUERIER' -var 'host=other.invalid.example' \
-            | tee replace.txt | grep -q "must be replaced\|forces replacement" \
-            && echo "PASS TC-18c: changing host forces replacement" \
-            || { echo "FAIL TC-18c: host change did not force replacement"; exit 1; }
+          terraform plan -no-color -var 'base_role=QUERIER' -var 'host=other.invalid.example' > replace.txt
+          if grep -q "must be replaced\|forces replacement" replace.txt; then
+            echo "PASS TC-18c: changing host forces replacement"
+          else
+            echo "FAIL TC-18c: host change did not force replacement"; exit 1
+          fi
 
           terraform destroy -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
           echo "PASS TC-28b: connection destroyed"
@@ -412,6 +435,8 @@ jobs:
       - name: Clean up anything left behind
         if: always()
         run: |
-          cd "$LIVE" 2>/dev/null && terraform destroy -auto-approve -var "folder_name=${FOLDER}" >/dev/null 2>&1 || true
+          if [ -n "${LIVE:-}" ] && cd "$LIVE" 2>/dev/null; then
+            terraform destroy -auto-approve -var "folder_name=${FOLDER}" >/dev/null 2>&1 || true
+          fi
           bash test/cleanup-orphans.sh --delete 2>/dev/null || true
           echo "cleanup attempted"
