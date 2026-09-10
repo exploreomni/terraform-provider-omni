@@ -3,8 +3,10 @@
 Manage an [Omni](https://omni.co) instance as code: connections, models, model YAML, folders,
 users, groups, and role assignments, all through the [Omni REST API](https://docs.omni.co/api).
 
-Built on the Terraform Plugin Framework, protocol version 6, so it works with Terraform 1.0+ and
-OpenTofu.
+Built on the Terraform Plugin Framework, protocol version 6. The test suite runs under both
+Terraform and OpenTofu in CI. Note that OpenTofu resolves an unqualified source against
+`registry.opentofu.org`, so until the provider is published to both registries, qualify the
+source or use a local mirror. See [docs/USAGE.md](./docs/USAGE.md) section 2c.
 
 ## Why
 

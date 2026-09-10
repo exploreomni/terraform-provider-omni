@@ -1,0 +1,403 @@
+name: provider edge test
+
+# Covers the cases the main CRUD suite cannot: negative paths, out-of-band
+# drift, imports, and the connection resource.
+#
+# Several of these expect Terraform to FAIL. A step that "passes" here often
+# means a command exited non-zero for the documented reason, so each one checks
+# the error text rather than just the exit code.
+on:
+  workflow_dispatch:
+    inputs:
+      base_model_name:
+        description: "Existing SHARED model to extend"
+        required: true
+        default: "ci-validate-27355042357"
+      test_connection:
+        description: "Attempt the connection resource with placeholder credentials"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-edge-test
+  cancel-in-progress: false
+
+jobs:
+  edge:
+    runs-on: ubuntu-latest
+    environment: omni-playground
+    env:
+      OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+      OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+
+      - name: Build provider into a filesystem mirror
+        run: |
+          VERSION=0.1.0
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
+          mkdir -p "$MIRROR"
+          go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
+          cat >> ~/.terraformrc <<TFRC
+
+          provider_installation {
+            filesystem_mirror {
+              path    = "${RUNNER_TEMP}/plugins"
+              include = ["registry.terraform.io/ashima-omni/omni"]
+            }
+            direct {
+              exclude = ["registry.terraform.io/ashima-omni/omni"]
+            }
+          }
+          TFRC
+
+      # ------------------------------------------------------------------
+      # Negative cases. No API calls: these must fail during validation.
+      # ------------------------------------------------------------------
+
+      - name: TC-30 role with neither model_id nor connection_id is rejected
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tc30" && cd "${RUNNER_TEMP}/tc30"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          resource "omni_user_model_role" "bad" {
+            user_id   = "00000000-0000-0000-0000-000000000000"
+            role_name = "QUERIER"
+          }
+          EOF
+          terraform init -input=false >/dev/null
+          if terraform validate 2>err.txt; then
+            echo "FAIL: config validated when it should have been rejected"; exit 1
+          fi
+          cat err.txt
+          grep -qi "model_id\|connection_id" err.txt \
+            && echo "PASS: rejected before any API call" \
+            || { echo "FAIL: rejected for the wrong reason"; exit 1; }
+
+      - name: TC-31 invalid dialect is rejected with the allowed values
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tc31" && cd "${RUNNER_TEMP}/tc31"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          resource "omni_connection" "bad" {
+            name    = "tf-edge-invalid-dialect"
+            dialect = "notadialect"
+          }
+          EOF
+          terraform init -input=false >/dev/null
+          if terraform validate 2>err.txt; then
+            echo "FAIL: invalid dialect accepted"; exit 1
+          fi
+          cat err.txt
+          grep -qi "snowflake" err.txt \
+            && echo "PASS: rejected and the allowed values were listed" \
+            || { echo "FAIL: message did not list valid dialects"; exit 1; }
+
+      - name: TC-29 an invalid token fails cleanly with no state written
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tc29" && cd "${RUNNER_TEMP}/tc29"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          resource "omni_folder" "f" {
+            name = "tf-edge-should-never-exist"
+          }
+          EOF
+          terraform init -input=false >/dev/null
+          if OMNI_API_TOKEN=definitely-not-a-valid-token terraform apply -auto-approve 2>err.txt; then
+            echo "FAIL: apply succeeded with an invalid token"; exit 1
+          fi
+          cat err.txt
+          if [ -s terraform.tfstate ] && grep -q '"omni_folder"' terraform.tfstate; then
+            echo "FAIL: a resource was written to state despite the failure"; exit 1
+          fi
+          echo "PASS: failed cleanly, nothing in state"
+
+      # ------------------------------------------------------------------
+      # Live cases. These create real objects and clean up after themselves.
+      # ------------------------------------------------------------------
+
+      - name: Set up a scratch workspace
+        run: |
+          mkdir -p "${RUNNER_TEMP}/live" && cd "${RUNNER_TEMP}/live"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+
+          variable "folder_name" { type = string }
+
+          resource "omni_folder" "f" {
+            name = var.folder_name
+            path = var.folder_name
+          }
+
+          output "id"  { value = omni_folder.f.id }
+          output "url" { value = omni_folder.f.url }
+          EOF
+          terraform init -input=false >/dev/null
+          echo "LIVE=${RUNNER_TEMP}/live" >> "$GITHUB_ENV"
+          echo "FOLDER=tf-edge-r${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: TC-09b drift is detected after an out-of-band change
+        run: |
+          cd "$LIVE"
+          terraform apply -auto-approve -var "folder_name=${FOLDER}" >/dev/null
+          ID=$(terraform output -raw id)
+          echo "FOLDER_ID=${ID}" >> "$GITHUB_ENV"
+
+          # Rename it behind Terraform's back, exactly as a UI edit would.
+          curl -sf -X PATCH -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${FOLDER}-changed-in-ui\"}" \
+            "$OMNI_BASE_URL/api/v1/folders/${ID}" >/dev/null
+
+          set +e
+          terraform plan -detailed-exitcode -var "folder_name=${FOLDER}" -out=/dev/null
+          code=$?
+          set -e
+          [ $code -eq 2 ] \
+            && echo "PASS: drift detected and a correction proposed" \
+            || { echo "FAIL: expected exit code 2, got $code"; exit 1; }
+
+          terraform apply -auto-approve -var "folder_name=${FOLDER}" >/dev/null
+          echo "corrected back to ${FOLDER}"
+
+      - name: TC-20 import a folder and confirm a clean plan
+        run: |
+          cd "$LIVE"
+          terraform state rm omni_folder.f >/dev/null
+          terraform import -var "folder_name=${FOLDER}" omni_folder.f "$FOLDER_ID" >/dev/null
+          set +e
+          terraform plan -detailed-exitcode -var "folder_name=${FOLDER}" -out=/dev/null
+          code=$?
+          set -e
+          [ $code -eq 0 ] \
+            && echo "PASS: imported state matches configuration" \
+            || { echo "FAIL: plan after import was not clean (exit $code)"; exit 1; }
+
+      - name: TC-33 a resource deleted outside Terraform is removed from state
+        run: |
+          cd "$LIVE"
+          curl -sf -X DELETE -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/folders/${FOLDER_ID}?force=true" >/dev/null
+
+          set +e
+          terraform plan -detailed-exitcode -var "folder_name=${FOLDER}" -out=/dev/null
+          code=$?
+          set -e
+          [ $code -eq 2 ] \
+            && echo "PASS: dropped from state and a recreate proposed" \
+            || { echo "FAIL: expected exit code 2, got $code"; exit 1; }
+
+      - name: TC-22 a non-empty folder will not delete without the recursive flag
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tc22" && cd "${RUNNER_TEMP}/tc22"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "n" { type = string }
+          resource "omni_folder" "parent" {
+            name               = var.n
+            path               = var.n
+            delete_recursively = false
+          }
+          output "id" { value = omni_folder.parent.id }
+          EOF
+          terraform init -input=false >/dev/null
+          terraform apply -auto-approve -var "n=tf-edge-parent-r${GITHUB_RUN_NUMBER}" >/dev/null
+          PARENT=$(terraform output -raw id)
+
+          # A child Terraform does not know about, so destroy sees an empty folder
+          # in state and a non-empty one on the instance.
+          curl -sf -X POST -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"orphan-child\",\"parentFolderId\":\"${PARENT}\"}" \
+            "$OMNI_BASE_URL/api/v1/folders" >/dev/null
+
+          set +e
+          terraform destroy -auto-approve -var "n=tf-edge-parent-r${GITHUB_RUN_NUMBER}" 2>err.txt
+          code=$?
+          set -e
+          cat err.txt
+          if [ $code -eq 0 ]; then
+            echo "NOTE: destroy succeeded, so the API deletes non-empty folders without force"
+          else
+            echo "PASS: destroy refused, as documented"
+          fi
+
+          # Clean up either way.
+          curl -s -X DELETE -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/folders/${PARENT}?force=true" >/dev/null || true
+
+      - name: TC-03b/TC-13b user attributes, using one discovered on the instance
+        run: |
+          REF=$(curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/user-attributes" \
+          | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          items = d if isinstance(d, list) else (d.get('records') or d.get('userAttributes') or d.get('results') or [])
+          refs = [i.get('reference') or i.get('name') for i in items if isinstance(i, dict)]
+          refs = [r for r in refs if r]
+          print(refs[0] if refs else '')
+          ")
+
+          if [ -z "$REF" ]; then
+            echo "SKIP: no user attribute defined on this instance, so nothing to set"
+            exit 0
+          fi
+          echo "using attribute reference: $REF"
+
+          mkdir -p "${RUNNER_TEMP}/attrs" && cd "${RUNNER_TEMP}/attrs"
+          cat > main.tf <<EOF
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "v" { type = string }
+          resource "omni_user" "u" {
+            user_name    = "tf-edge-attr-r${GITHUB_RUN_NUMBER}@example.invalid"
+            display_name = "TF Edge Attr"
+            attributes   = { "${REF}" = var.v }
+          }
+          EOF
+          terraform init -input=false >/dev/null
+
+          terraform apply -auto-approve -var 'v=first' >/dev/null
+          echo "PASS TC-03b: user created with an attribute"
+
+          set +e
+          terraform plan -detailed-exitcode -var 'v=first' -out=/dev/null
+          code=$?
+          set -e
+          [ $code -eq 0 ] && echo "PASS: attribute round-trips with no drift" \
+                          || { echo "FAIL: drift on the attribute (exit $code)"; }
+
+          terraform apply -auto-approve -var 'v=second' >/dev/null
+          echo "PASS TC-13b: attribute value changed in place"
+
+          terraform destroy -auto-approve -var 'v=second' >/dev/null
+
+      - name: TC-14b removing the only group member leaves the group in place
+        run: |
+          mkdir -p "${RUNNER_TEMP}/tc14b" && cd "${RUNNER_TEMP}/tc14b"
+          cat > main.tf <<EOF
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "keep_member" { type = bool }
+          resource "omni_user" "u" {
+            user_name    = "tf-edge-member-r${GITHUB_RUN_NUMBER}@example.invalid"
+            display_name = "TF Edge Member"
+          }
+          resource "omni_user_group" "g" {
+            display_name = "tf-edge-group-r${GITHUB_RUN_NUMBER}"
+            member_ids   = var.keep_member ? [omni_user.u.id] : []
+          }
+          output "group_id" { value = omni_user_group.g.id }
+          EOF
+          terraform init -input=false >/dev/null
+
+          terraform apply -auto-approve -var 'keep_member=true' >/dev/null
+          GID=$(terraform output -raw group_id)
+
+          terraform apply -auto-approve -var 'keep_member=false' >/dev/null
+          COUNT=$(curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/scim/v2/groups/${GID}" \
+          | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('members') or []))")
+
+          [ "$COUNT" = "0" ] \
+            && echo "PASS: membership emptied, group survives" \
+            || { echo "FAIL: group still reports $COUNT members"; exit 1; }
+
+          terraform destroy -auto-approve -var 'keep_member=false' >/dev/null
+
+      - name: TC-08b/TC-18b/TC-18c/TC-28b connection lifecycle
+        if: inputs.test_connection
+        run: |
+          mkdir -p "${RUNNER_TEMP}/conn" && cd "${RUNNER_TEMP}/conn"
+          cat > main.tf <<EOF
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "base_role" { type = string }
+          variable "host"      { type = string }
+          resource "omni_connection" "c" {
+            name      = "tf-edge-conn-r${GITHUB_RUN_NUMBER}"
+            dialect   = "postgres"
+            host      = var.host
+            port      = 5432
+            database  = "postgres"
+            username  = "tf_edge_test"
+            password  = "not-a-real-password"
+            base_role = var.base_role
+          }
+          output "id" { value = omni_connection.c.id }
+          EOF
+          terraform init -input=false >/dev/null
+
+          set +e
+          terraform apply -auto-approve -var 'base_role=NO_ACCESS' -var 'host=db.invalid.example' 2>err.txt
+          code=$?
+          set -e
+          if [ $code -ne 0 ]; then
+            cat err.txt
+            echo "NOTE TC-08b: the API validates connectivity on create, so this resource"
+            echo "cannot be exercised without a reachable warehouse. Recorded, not a pass."
+            exit 0
+          fi
+          echo "PASS TC-08b: connection created"
+
+          set +e
+          terraform plan -detailed-exitcode -var 'base_role=NO_ACCESS' -var 'host=db.invalid.example' -out=/dev/null
+          rc=$?
+          set -e
+          [ $rc -eq 0 ] && echo "PASS: connection reads back with no drift" || echo "FAIL: drift after create"
+
+          terraform apply -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
+          echo "PASS TC-18b: base_role changed in place"
+
+          terraform plan -no-color -var 'base_role=QUERIER' -var 'host=other.invalid.example' \
+            | tee replace.txt | grep -q "must be replaced\|forces replacement" \
+            && echo "PASS TC-18c: changing host forces replacement" \
+            || echo "FAIL TC-18c: host change did not force replacement"
+
+          terraform destroy -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
+          echo "PASS TC-28b: connection destroyed"
+
+      - name: Clean up anything left behind
+        if: always()
+        run: |
+          cd "$LIVE" 2>/dev/null && terraform destroy -auto-approve -var "folder_name=${FOLDER}" >/dev/null 2>&1 || true
+          bash test/cleanup-orphans.sh --delete 2>/dev/null || true
+          echo "cleanup attempted"

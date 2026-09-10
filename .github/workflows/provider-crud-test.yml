@@ -21,6 +21,11 @@ on:
         description: "Reference of an existing user attribute, or blank to skip"
         required: false
         default: ""
+      tools:
+        description: "Which CLI to run the suite under"
+        type: choice
+        options: [both, terraform, tofu]
+        default: both
       destroy:
         description: "Destroy at the end"
         type: boolean
@@ -40,13 +45,26 @@ defaults:
 
 jobs:
   crud:
+    name: crud (${{ matrix.tool }})
     runs-on: ubuntu-latest
     environment: omni-playground
+
+    strategy:
+      fail-fast: false
+      # One leg at a time. Two runs against a single instance would compete for
+      # the 60 requests a minute rate limit.
+      max-parallel: 1
+      matrix:
+        tool: [terraform, tofu]
+
+    if: inputs.tools == 'both' || inputs.tools == matrix.tool
+
     env:
       OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
       OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
       TF_IN_AUTOMATION: "1"
       TF_INPUT: "0"
+      TF: ${{ matrix.tool }}
 
     steps:
       - uses: actions/checkout@v4
@@ -57,48 +75,75 @@ jobs:
           cache: true
 
       - uses: hashicorp/setup-terraform@v3
+        if: matrix.tool == 'terraform'
         with:
           terraform_version: "1.9.*"
           terraform_wrapper: false
 
+      - uses: opentofu/setup-opentofu@v1
+        if: matrix.tool == 'tofu'
+        with:
+          tofu_version: "1.8.*"
+          tofu_wrapper: false
+
       - name: Build provider into a filesystem mirror
         working-directory: .
         run: |
+          # Terraform and OpenTofu resolve an unqualified source against
+          # different default registries, so the binary goes under both
+          # hostnames and both CLI config files get the same block. The same
+          # configuration then works unchanged under either tool, which is the
+          # thing being tested.
           VERSION=0.1.0
-          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
-          mkdir -p "$MIRROR"
-          go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
-          cat >> ~/.terraformrc <<TFRC
+          for HOST in registry.terraform.io registry.opentofu.org; do
+            MIRROR="${RUNNER_TEMP}/plugins/${HOST}/ashima-omni/omni/${VERSION}/linux_amd64"
+            mkdir -p "$MIRROR"
+            go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
+          done
+
+          CONFIG=$(cat <<TFRC
 
           provider_installation {
             filesystem_mirror {
-              path    = "${RUNNER_TEMP}/plugins"
-              include = ["registry.terraform.io/ashima-omni/omni"]
+              path = "${RUNNER_TEMP}/plugins"
+              include = [
+                "registry.terraform.io/ashima-omni/omni",
+                "registry.opentofu.org/ashima-omni/omni",
+              ]
             }
             direct {
-              exclude = ["registry.terraform.io/ashima-omni/omni"]
+              exclude = [
+                "registry.terraform.io/ashima-omni/omni",
+                "registry.opentofu.org/ashima-omni/omni",
+              ]
             }
           }
           TFRC
+          )
+
+          # setup-terraform writes ~/.terraformrc itself when given a token, so
+          # append rather than overwrite.
+          printf '%s\n' "$CONFIG" >> ~/.terraformrc
+          printf '%s\n' "$CONFIG" >> ~/.tofurc
 
       - name: Write tfvars
         run: |
           # Names are unique per run. A run that fails before destroy leaves
           # objects behind, and fixed names would then collide with the next
           # run: renaming a model to a name an orphan already holds is rejected.
-          echo "SUFFIX=r${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-          echo "SUFFIX_V2=r${GITHUB_RUN_NUMBER}b" >> "$GITHUB_ENV"
+          SHORT=$(echo "${{ matrix.tool }}" | cut -c1-2)
+          echo "SUFFIX=r${GITHUB_RUN_NUMBER}${SHORT}" >> "$GITHUB_ENV"
+          echo "SUFFIX_V2=r${GITHUB_RUN_NUMBER}${SHORT}b" >> "$GITHUB_ENV"
 
           EMAIL="${{ inputs.test_user_email }}"
-          EMAIL="${EMAIL%%@*}-r${GITHUB_RUN_NUMBER}@${EMAIL##*@}"
-          echo "TEST_EMAIL=${EMAIL}" >> "$GITHUB_ENV"
+          EMAIL="${EMAIL%%@*}-r${GITHUB_RUN_NUMBER}${SHORT}@${EMAIL##*@}"
 
           cat > terraform.tfvars <<TFVARS
           connection_name    = "${{ inputs.connection_name }}"
           base_model_name    = "${{ inputs.base_model_name }}"
           test_user_email    = "${EMAIL}"
           user_attribute_key = "${{ inputs.user_attribute_key }}"
-          suffix             = "r${GITHUB_RUN_NUMBER}"
+          suffix             = "r${GITHUB_RUN_NUMBER}${SHORT}"
           test_connection    = false
           TFVARS
           cat terraform.tfvars
@@ -109,24 +154,24 @@ jobs:
       # the log prints their IDs so they can be removed by hand.
       - name: TC-00 init and validate
         run: |
-          terraform init -input=false
+          $TF init -input=false
           terraform validate
 
       - name: TC-01..08 create
-        run: terraform apply -auto-approve
+        run: $TF apply -auto-approve
 
       - name: Record IDs for post-destroy verification
         id: ids
         run: |
-          terraform output -json ids > "${RUNNER_TEMP}/ids.json"
+          $TF output -json ids > "${RUNNER_TEMP}/ids-${{ matrix.tool }}.json"
           python3 - <<'PY' >> "$GITHUB_ENV"
           import json, os
-          ids = json.load(open(os.environ["RUNNER_TEMP"] + "/ids.json"))
+          ids = json.load(open(f"{os.environ['RUNNER_TEMP']}/ids-{os.environ['TF']}.json"))
           for k, v in ids.items():
               if v:
                   print(f"ID_{k.upper()}={v}")
           PY
-          cat "${RUNNER_TEMP}/ids.json"
+          cat "${RUNNER_TEMP}/ids-${{ matrix.tool }}.json"
 
       # Prints the raw model-roles responses. The from.type labels are not
       # documented and differ between the two endpoints, so this is how we know
@@ -143,7 +188,7 @@ jobs:
       - name: TC-09 read round-trips with no drift
         run: |
           set +e
-          terraform plan -detailed-exitcode -out=/dev/null
+          $TF plan -detailed-exitcode -out=/dev/null
           code=$?
           set -e
           case $code in
@@ -154,7 +199,7 @@ jobs:
 
       - name: TC-10 data sources resolve to the created objects
         run: |
-          terraform output -json data_sources | tee ds.json
+          $TF output -json data_sources | tee ds.json
           python3 - <<'PY'
           import json, sys
           ds = json.load(open("ds.json"))
@@ -168,14 +213,14 @@ jobs:
 
       - name: TC-11..18 update
         run: |
-          terraform apply -auto-approve \
+          $TF apply -auto-approve \
             -var "suffix=${SUFFIX_V2}" \
             -var 'role_name=VIEWER'
 
       - name: TC-19 read round-trips after update
         run: |
           set +e
-          terraform plan -detailed-exitcode -out=/dev/null \
+          $TF plan -detailed-exitcode -out=/dev/null \
             -var "suffix=${SUFFIX_V2}" \
             -var 'role_name=VIEWER'
           code=$?
@@ -208,7 +253,7 @@ jobs:
       - name: TC-21..28 destroy
         if: always() && inputs.destroy
         run: |
-          terraform destroy -auto-approve \
+          $TF destroy -auto-approve \
             -var "suffix=${SUFFIX_V2}" \
             -var 'role_name=VIEWER'
 
@@ -242,6 +287,6 @@ jobs:
         run: |
           echo "Destroy may not have completed. Objects created by this run:" >> "$GITHUB_STEP_SUMMARY"
           echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          cat "${RUNNER_TEMP}/ids.json" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "{}" >> "$GITHUB_STEP_SUMMARY"
+          cat "${RUNNER_TEMP}/ids-${{ matrix.tool }}.json" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "{}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "Remove any that survive by hand." >> "$GITHUB_STEP_SUMMARY"
