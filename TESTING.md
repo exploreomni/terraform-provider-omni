@@ -63,20 +63,20 @@ failure is worth more than a deleted row.
 | ID | Case | Expected | Actual | Status |
 | --- | --- | --- | --- | --- |
 | TC-01 | `omni_folder` top level with explicit `path` | Created, `path` matches config, `url` populated | Created in 0s, id 9d16b92d | PASS |
-| TC-02 | `omni_folder` nested via `parent_folder_id` | Created, `scope` inherited, `path` derived | Created in 1s, id 9b9f5ed2 | PASS |
-| TC-03 | `omni_user` with display name | Created, `active = true` | Created in 0s, id e29daa7f | PASS |
+| TC-02 | `omni_folder` nested via `parent_folder_id` | Created, `scope` inherited, `path` derived | Path derived as `tf-test-v1/tf-test-child-v1`, scope inherited `organization` | PASS |
+| TC-03 | `omni_user` with display name | Created, `active = true` | Created, `active = true` | PASS |
 | TC-03b | `omni_user` with `attributes` | Declared keys round-trip | | |
 | TC-04 | `omni_user_group` with one member | Created, membership applied | Created in 0s, id ybJ3LeHP | PASS |
-| TC-05 | `omni_model` SHARED_EXTENSION on a base model | Created, `model_kind` echoed back | Run 1: 400 base model does not belong to the specified connection. Test config bug, see finding 7 | RETEST |
-| TC-07 | `omni_user_model_role` QUERIER on the model | Assigned, composite ID `<user>:<model>` | | |
-| TC-08 | `omni_user_group_model_role` QUERIER | Assigned | | |
+| TC-05 | `omni_model` SHARED_EXTENSION on a base model | Created, `model_kind` echoed back | Created in 0s, id 484c696e | PASS |
+| TC-07 | `omni_user_model_role` QUERIER on the model | Assigned, composite ID `<user>:<model>` | Assigned, id `326e51c8...:484c696e...` | PASS |
+| TC-08 | `omni_user_group_model_role` QUERIER | Assigned | Assigned, id `gI8mD-wI:484c696e...` | PASS |
 | TC-08b | `omni_connection` (opt in) | Created, ID returned | | |
 
 ### Read
 
 | ID | Case | Expected | Actual | Status |
 | --- | --- | --- | --- | --- |
-| TC-09 | Plan immediately after create | No changes, no external-drift notice | | |
+| TC-09 | Plan immediately after create | No changes, no external-drift notice | Run 4: both role resources reported deleted. Response wrapper is `results`, entries carry `from.type`. Finding 10 | RETEST |
 | TC-09b | Plan after an out-of-band UI edit | Drift detected and reported | | |
 | TC-10 | `data.omni_user` by email | Resolves to the created user | Resolved to e29daa7f, matches | PASS |
 | TC-10b | `data.omni_user_group` by name | Resolves to the created group | Resolved to ybJ3LeHP, matches | PASS |
@@ -111,13 +111,13 @@ failure is worth more than a deleted row.
 
 | ID | Case | Expected | Actual | Status |
 | --- | --- | --- | --- | --- |
-| TC-21 | Destroy nested folder before parent | Both removed, correct ordering | | |
+| TC-21 | Destroy nested folder before parent | Both removed, correct ordering | Child destroyed first, then parent, both clean | PASS |
 | TC-22 | Destroy non-empty folder without `delete_recursively` | Fails with a clear API error | | |
-| TC-23 | Destroy user | Removed, gone from `GET /scim/v2/users` | | |
-| TC-24 | Destroy group | Removed | | |
-| TC-25 | Destroy model | Archived, `deletedAt` set, absent from active list | | |
-| TC-27 | Destroy user role | Downgraded to `NO_ACCESS`, verified via the API | | |
-| TC-28 | Destroy group role | Downgraded to `NO_ACCESS` | | |
+| TC-23 | Destroy user | Removed, gone from `GET /scim/v2/users` | GET returned 404 | PASS |
+| TC-24 | Destroy group | Removed | Destroyed in 0s | PASS |
+| TC-25 | Destroy model | Archived, `deletedAt` set, absent from active list | Absent from the active list | PASS |
+| TC-27 | Destroy user role | Downgraded to `NO_ACCESS`, verified via the API | `NO_ACCESS` present with `from.type: User Role`, but `resolved: false`. See finding 11 | PASS with caveat |
+| TC-28 | Destroy group role | Downgraded to `NO_ACCESS` | Downgraded | PASS |
 | TC-28b | Destroy connection | Removed | | |
 
 ### Error handling
@@ -163,6 +163,8 @@ Issues found so far, all fixed. Kept as regression cases.
 | 6 | Mirror config ignored in CI | `setup-terraform` overwrites `~/.terraformrc` | Append after that action runs | - |
 | 7 | Model create rejected with "base model does not belong to the specified connection" | Test config looked up the connection and the base model independently, and they disagreed | Take `connection_id` from `data.omni_model.base.connection_id` | TC-05 |
 | 8 | Model YAML read failed: cannot unmarshal object into `[]client.YAMLFile` | `GET /v1/models/{id}/yaml` returns `files` as an object keyed by filename, not an array | Resource removed from the provider; model content belongs to git sync | - |
+| 10 | Roles reported as deleted on every refresh | List response wraps entries in `results`, not `modelRoles`/`records`, and marks origin via `from.type` rather than a flat `source` | Parse `results`; match only entries whose `from.type` is the expected direct-assignment type | TC-09 |
+| 11 | `NO_ACCESS` on destroy does not necessarily revoke access | Omni resolves roles by priority. A direct assignment is priority 0; the connection base role is 150 and wins, so the destroyed assignment shows `resolved: false` | Documented on `role_on_destroy`. Set the connection `base_role` to `NO_ACCESS` if destroy must revoke | TC-27 |
 | 9 | CI build failed with "updates to go.mod needed" | Removing the yaml resource changed the dependency graph. CI builds with `-mod=readonly`; the local environment had `-mod=mod`, which hid it | `go mod tidy`, plus a tidiness gate in the test workflow | - |
 
 The shape of findings 3 and 4 is worth remembering: **different Omni endpoints
@@ -176,6 +178,7 @@ write response is partial and read back rather than trusting it.
 | CI #1 | 2026-09-09 | 5 resources created, 4 data sources resolved. Stopped at TC-05 on a test config error (finding 7). No provider defect. |
 | CI #2 | 2026-09-09 | Create, no-drift read, data sources, update and server-side rename all passed for 7 resources. Failed at destroy on the model YAML read (finding 8). Objects orphaned and removed by hand. |
 | CI #3 | 2026-09-09 | Failed at the build step: stale `go.mod` (finding 9) and leftover `topic_description` vars in the workflow. No provider code exercised. |
+| CI #4 | 2026-09-10 | 7 resources created, all 4 data sources matched, destroy removed 5 cleanly with correct ordering, and post-destroy state verified server side. One failure: drift on both role resources (finding 10). |
 
 ## Not covered
 

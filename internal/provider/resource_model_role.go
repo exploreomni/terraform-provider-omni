@@ -78,7 +78,12 @@ func modelRoleAttributes(subjectAttr, subjectDescription string) map[string]sche
 			Computed: true,
 			Default:  stringdefault.StaticString("NO_ACCESS"),
 			MarkdownDescription: "The Omni API has no endpoint for removing a role assignment, so destroying " +
-				"this resource downgrades the role to this value instead. Defaults to `NO_ACCESS`.",
+				"this resource downgrades the role to this value instead. Defaults to `NO_ACCESS`.\n\n" +
+				"Be aware that `NO_ACCESS` does not necessarily revoke access. Omni resolves roles by " +
+				"priority, and a direct assignment sits at priority 0 while the connection's base role sits " +
+				"higher. If the connection grants `QUERIER` to everyone, a destroyed assignment leaves the " +
+				"subject with `QUERIER`, not no access. Set the connection's `base_role` to `NO_ACCESS` if " +
+				"you need destroy to actually remove access.",
 		},
 	}
 }
@@ -100,22 +105,48 @@ func splitModelRoleID(id string) (subjectID, targetID string, err error) {
 }
 
 // findModelRole locates the assignment that matches the tracked model or
-// connection. Roles inherited from groups are ignored for user assignments.
-func findModelRole(roles []client.ModelRole, modelID, connectionID string) *client.ModelRole {
+// connection.
+//
+// The endpoint reports every role that applies, including ones the caller never
+// assigned: the connection's base role shows up as "Connection Base Role", and
+// group membership as "User Group Role". Only the entry whose from.type matches
+// wantSource is a direct assignment, so base roles must not be mistaken for one.
+// Without this filter, reading a role that was never assigned would appear to
+// succeed, and a role that was assigned could be matched against the wrong row.
+func findModelRole(roles []client.ModelRole, modelID, connectionID, wantSource string) *client.ModelRole {
+	var fallback *client.ModelRole
+
 	for i := range roles {
 		role := roles[i]
-		if strings.EqualFold(role.Source, "GROUP") || strings.EqualFold(role.Source, "INHERITED") {
+
+		matchesTarget := (modelID != "" && role.ModelID == modelID) ||
+			(modelID == "" && connectionID != "" && role.ConnectionID == connectionID)
+		if !matchesTarget {
 			continue
 		}
-		if modelID != "" && role.ModelID == modelID {
+
+		source := role.SourceType()
+		if strings.Contains(strings.ToLower(source), "base role") {
+			// The connection default, not something Terraform assigned.
+			continue
+		}
+		if strings.EqualFold(source, wantSource) {
 			return &roles[i]
 		}
-		if modelID == "" && connectionID != "" && role.ConnectionID == connectionID && role.ModelID == "" {
-			return &roles[i]
+		if fallback == nil && source == "" {
+			// Older responses without a from block: take it, but only if
+			// nothing better turns up.
+			fallback = &roles[i]
 		}
 	}
-	return nil
+	return fallback
 }
+
+const (
+	// from.type values the model-roles endpoints report for direct assignments.
+	sourceUserRole  = "User Role"
+	sourceGroupRole = "User Group Role"
+)
 
 // ---------------------------------------------------------------------------
 // omni_user_model_role
@@ -202,7 +233,7 @@ func (r *userModelRoleResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	match := findModelRole(roles, state.ModelID.ValueString(), state.ConnectionID.ValueString())
+	match := findModelRole(roles, state.ModelID.ValueString(), state.ConnectionID.ValueString(), sourceUserRole)
 	if match == nil {
 		resp.State.RemoveResource(ctx)
 		return
@@ -352,7 +383,7 @@ func (r *userGroupModelRoleResource) Read(ctx context.Context, req resource.Read
 		return
 	}
 
-	match := findModelRole(roles, state.ModelID.ValueString(), state.ConnectionID.ValueString())
+	match := findModelRole(roles, state.ModelID.ValueString(), state.ConnectionID.ValueString(), sourceGroupRole)
 	if match == nil {
 		resp.State.RemoveResource(ctx)
 		return

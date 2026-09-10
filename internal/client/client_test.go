@@ -173,3 +173,40 @@ func testClient(t *testing.T, serverURL string) *Client {
 		http:      &http.Client{Timeout: 10 * time.Second},
 	}
 }
+
+func TestListModelRolesParsesResultsShape(t *testing.T) {
+	// The shape the API actually returns, captured from a live instance.
+	body := `{
+	  "membershipId": "u1",
+	  "results": [
+	    {"baseRole":"QUERY_TOPICS","from":{"type":"Connection Base Role"},"priority":150,
+	     "roleName":"QUERY_TOPICS","connectionId":"c1","modelId":"m1","resolved":true},
+	    {"baseRole":"QUERIER","from":{"type":"User Role"},"priority":0,
+	     "roleName":"QUERIER","connectionId":"c1","modelId":"m1","resolved":false}
+	  ]
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	c := testClient(t, server.URL)
+
+	roles, err := c.ListUserModelRoles(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("ListUserModelRoles returned an error: %v", err)
+	}
+	if len(roles) != 2 {
+		t.Fatalf("got %d roles, want 2", len(roles))
+	}
+	if roles[0].SourceType() != "Connection Base Role" {
+		t.Errorf("roles[0] source = %q, want %q", roles[0].SourceType(), "Connection Base Role")
+	}
+	if roles[1].SourceType() != "User Role" || roles[1].RoleName != "QUERIER" {
+		t.Errorf("roles[1] = %+v, want a User Role QUERIER entry", roles[1])
+	}
+	if roles[0].Priority != 150 || !roles[0].Resolved {
+		t.Errorf("priority/resolved not parsed: %+v", roles[0])
+	}
+}

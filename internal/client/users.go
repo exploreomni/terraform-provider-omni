@@ -191,16 +191,36 @@ type ModelRoleInput struct {
 	RoleName     string `json:"roleName"`
 }
 
-// ModelRole is a resolved role assignment.
+// ModelRole is a role assignment as reported by the model-roles endpoints.
+//
+// The list response is an object with a "results" array, and each entry says
+// where the role came from via "from.type": "User Role" for a direct
+// assignment, "Connection Base Role" for the connection default, and so on.
+// "resolved" marks which entry actually wins: a NO_ACCESS assignment at
+// priority 0 loses to a connection base role at priority 150.
 type ModelRole struct {
-	UserID       string `json:"userId,omitempty"`
-	UserGroupID  string `json:"userGroupId,omitempty"`
-	ConnectionID string `json:"connectionId,omitempty"`
-	ModelID      string `json:"modelId,omitempty"`
-	RoleName     string `json:"roleName,omitempty"`
-	// Source distinguishes direct assignments from group-inherited ones on
-	// endpoints that report it.
-	Source string `json:"source,omitempty"`
+	UserID       string      `json:"userId,omitempty"`
+	UserGroupID  string      `json:"userGroupId,omitempty"`
+	ConnectionID string      `json:"connectionId,omitempty"`
+	ModelID      string      `json:"modelId,omitempty"`
+	RoleName     string      `json:"roleName,omitempty"`
+	BaseRole     string      `json:"baseRole,omitempty"`
+	Priority     int         `json:"priority,omitempty"`
+	Resolved     bool        `json:"resolved,omitempty"`
+	From         *RoleSource `json:"from,omitempty"`
+}
+
+// RoleSource says where a role assignment came from.
+type RoleSource struct {
+	Type string `json:"type,omitempty"`
+}
+
+// SourceType returns the from.type value, or an empty string when absent.
+func (r ModelRole) SourceType() string {
+	if r.From == nil {
+		return ""
+	}
+	return r.From.Type
 }
 
 // AssignUserModelRole assigns or updates a user's role on a model or connection.
@@ -249,6 +269,7 @@ func (c *Client) listModelRoles(ctx context.Context, path string) ([]ModelRole, 
 	}
 
 	var wrapped struct {
+		Results    []ModelRole `json:"results"`
 		ModelRoles []ModelRole `json:"modelRoles"`
 		Records    []ModelRole `json:"records"`
 		Roles      []ModelRole `json:"roles"`
@@ -257,7 +278,7 @@ func (c *Client) listModelRoles(ctx context.Context, path string) ([]ModelRole, 
 	if err := json.Unmarshal(raw, &wrapped); err != nil {
 		return nil, fmt.Errorf("decoding model roles from %s: %w", path, err)
 	}
-	for _, candidate := range [][]ModelRole{wrapped.ModelRoles, wrapped.Records, wrapped.Roles, wrapped.Data} {
+	for _, candidate := range [][]ModelRole{wrapped.Results, wrapped.ModelRoles, wrapped.Records, wrapped.Roles, wrapped.Data} {
 		if candidate != nil {
 			return candidate, nil
 		}
