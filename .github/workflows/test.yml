@@ -31,6 +31,17 @@ jobs:
             exit 1
           fi
 
+      # Catches go.mod drifting from what the code actually imports. Without
+      # this, a stale go.mod only surfaces later, in whichever workflow happens
+      # to build next, with a confusing error.
+      - name: go.mod is tidy
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo "::error::go.mod or go.sum is out of date. Run 'go mod tidy' and commit the result."
+            exit 1
+          fi
+
       - name: Build
         run: go build -v ./...
 

@@ -162,6 +162,8 @@ Issues found so far, all fixed. Kept as regression cases.
 | 5 | CI `terraform init` failed | `dev_overrides` does not stop init querying the registry | Filesystem mirror in CI | - |
 | 6 | Mirror config ignored in CI | `setup-terraform` overwrites `~/.terraformrc` | Append after that action runs | - |
 | 7 | Model create rejected with "base model does not belong to the specified connection" | Test config looked up the connection and the base model independently, and they disagreed | Take `connection_id` from `data.omni_model.base.connection_id` | TC-05 |
+| 8 | Model YAML read failed: cannot unmarshal object into `[]client.YAMLFile` | `GET /v1/models/{id}/yaml` returns `files` as an object keyed by filename, not an array | Resource removed from the provider; model content belongs to git sync | - |
+| 9 | CI build failed with "updates to go.mod needed" | Removing the yaml resource changed the dependency graph. CI builds with `-mod=readonly`; the local environment had `-mod=mod`, which hid it | `go mod tidy`, plus a tidiness gate in the test workflow | - |
 
 The shape of findings 3 and 4 is worth remembering: **different Omni endpoints
 return different subsets of the same object.** Any new resource should assume a
@@ -172,6 +174,8 @@ write response is partial and read back rather than trusting it.
 | Run | Date | Result |
 | --- | --- | --- |
 | CI #1 | 2026-09-09 | 5 resources created, 4 data sources resolved. Stopped at TC-05 on a test config error (finding 7). No provider defect. |
+| CI #2 | 2026-09-09 | Create, no-drift read, data sources, update and server-side rename all passed for 7 resources. Failed at destroy on the model YAML read (finding 8). Objects orphaned and removed by hand. |
+| CI #3 | 2026-09-09 | Failed at the build step: stale `go.mod` (finding 9) and leftover `topic_description` vars in the workflow. No provider code exercised. |
 
 ## Not covered
 
