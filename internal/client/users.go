@@ -166,9 +166,18 @@ func (c *Client) ReplaceGroup(ctx context.Context, id string, in GroupInput) (*G
 	if len(in.Schemas) == 0 {
 		in.Schemas = []string{scimGroupSchema}
 	}
+	// A nil slice marshals to null, which the API rejects as a missing field.
+	if in.Members == nil {
+		in.Members = []GroupMembr{}
+	}
 
 	var out Group
 	if err := c.Put(ctx, "/scim/v2/groups/"+url.PathEscape(id), in, &out); err != nil {
+		// Group payloads carry no secrets, so echoing the body makes a
+		// rejection diagnosable instead of guesswork.
+		if body, mErr := json.Marshal(in); mErr == nil {
+			return nil, fmt.Errorf("%w (request body: %s)", err, string(body))
+		}
 		return nil, err
 	}
 	return &out, nil

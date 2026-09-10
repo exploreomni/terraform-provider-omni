@@ -83,11 +83,22 @@ jobs:
 
       - name: Write tfvars
         run: |
+          # Names are unique per run. A run that fails before destroy leaves
+          # objects behind, and fixed names would then collide with the next
+          # run: renaming a model to a name an orphan already holds is rejected.
+          echo "SUFFIX=r${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "SUFFIX_V2=r${GITHUB_RUN_NUMBER}b" >> "$GITHUB_ENV"
+
+          EMAIL="${{ inputs.test_user_email }}"
+          EMAIL="${EMAIL%%@*}-r${GITHUB_RUN_NUMBER}@${EMAIL##*@}"
+          echo "TEST_EMAIL=${EMAIL}" >> "$GITHUB_ENV"
+
           cat > terraform.tfvars <<TFVARS
           connection_name    = "${{ inputs.connection_name }}"
           base_model_name    = "${{ inputs.base_model_name }}"
-          test_user_email    = "${{ inputs.test_user_email }}"
+          test_user_email    = "${EMAIL}"
           user_attribute_key = "${{ inputs.user_attribute_key }}"
+          suffix             = "r${GITHUB_RUN_NUMBER}"
           test_connection    = false
           TFVARS
           cat terraform.tfvars
@@ -158,14 +169,14 @@ jobs:
       - name: TC-11..18 update
         run: |
           terraform apply -auto-approve \
-            -var 'suffix=v2' \
+            -var "suffix=${SUFFIX_V2}" \
             -var 'role_name=VIEWER'
 
       - name: TC-19 read round-trips after update
         run: |
           set +e
           terraform plan -detailed-exitcode -out=/dev/null \
-            -var 'suffix=v2' \
+            -var "suffix=${SUFFIX_V2}" \
             -var 'role_name=VIEWER'
           code=$?
           set -e
@@ -187,7 +198,7 @@ jobs:
               sys.exit('FAIL: renamed folder not found')
           f = rec[0]
           print('  name:', f['name'], ' path:', f['path'])
-          if not f['name'].endswith('v2'):
+          if not f['name'].endswith(os.environ['SUFFIX_V2']):
               sys.exit('FAIL: rename did not reach the API')
           print('PASS: rename confirmed server side')
           "
@@ -198,7 +209,7 @@ jobs:
         if: always() && inputs.destroy
         run: |
           terraform destroy -auto-approve \
-            -var 'suffix=v2' \
+            -var "suffix=${SUFFIX_V2}" \
             -var 'role_name=VIEWER'
 
       - name: TC-25..28 verify what could not truly be deleted
