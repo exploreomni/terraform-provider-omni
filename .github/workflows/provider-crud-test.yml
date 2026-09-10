@@ -203,6 +203,7 @@ jobs:
 
       - name: TC-10 data sources resolve to the created objects
         run: |
+          set -o pipefail
           $TF output -json data_sources | tee ds.json
           python3 - <<'PY'
           import json, sys
@@ -237,6 +238,7 @@ jobs:
 
       - name: TC-11 confirm the rename reached the API
         run: |
+          set -o pipefail
           curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
             "$OMNI_BASE_URL/api/v1/folders?pageSize=100" \
           | python3 -c "

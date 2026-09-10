@@ -34,6 +34,13 @@ jobs:
       # Catches go.mod drifting from what the code actually imports. Without
       # this, a stale go.mod only surfaces later, in whichever workflow happens
       # to build next, with a confusing error.
+      # Catches invalid workflow YAML before it reaches GitHub, where a broken
+      # file does not error: the workflow simply disappears from the list.
+      - name: Lint workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
       - name: go.mod is tidy
         run: |
           go mod tidy

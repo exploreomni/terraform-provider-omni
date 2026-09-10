@@ -6,6 +6,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -62,11 +63,17 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				ElementType: types.StringType,
 				MarkdownDescription: "User attributes as key/value pairs. Keys are the **Reference** values from " +
 					"**Settings > User attributes**. Only the keys declared here are tracked; attributes set " +
-					"elsewhere are left alone.",
+					"elsewhere are left alone.\n\n" +
+					"Do not declare Omni's built-in attributes, such as those prefixed `omni_`. The platform " +
+					"populates them and does not return them as user attributes, so Terraform will propose " +
+					"setting them on every plan.",
 			},
 			"active": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether the user is active.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}

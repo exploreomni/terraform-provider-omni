@@ -248,17 +248,23 @@ jobs:
           set -e
           cat err.txt
           if [ $code -eq 0 ]; then
-            echo "NOTE: destroy succeeded, so the API deletes non-empty folders without force"
+            echo "FAIL: destroy of a non-empty folder succeeded without the recursive flag."
+            echo "Edge run 1 showed the API returns 400 here, so this is a change in behaviour."
+            CLEANUP_FAILED=1
           else
-            echo "PASS: destroy refused, as documented"
+            grep -qi "only empty folders" err.txt \
+              && echo "PASS: destroy refused with the documented message" \
+              || { echo "FAIL: destroy failed, but not for the documented reason"; CLEANUP_FAILED=1; }
           fi
 
-          # Clean up either way.
+          # Clean up before reporting, so a failure never leaves the folder behind.
           curl -s -X DELETE -H "Authorization: Bearer $OMNI_API_TOKEN" \
             "$OMNI_BASE_URL/api/v1/folders/${PARENT}?force=true" >/dev/null || true
+          [ -z "${CLEANUP_FAILED:-}" ] || exit 1
 
       - name: TC-03b/TC-13b user attributes, using one discovered on the instance
         run: |
+          set -o pipefail
           REF=$(curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
             "$OMNI_BASE_URL/api/v1/user-attributes" \
           | python3 -c "
@@ -266,12 +272,17 @@ jobs:
           d = json.load(sys.stdin)
           items = d if isinstance(d, list) else (d.get('records') or d.get('userAttributes') or d.get('results') or [])
           refs = [i.get('reference') or i.get('name') for i in items if isinstance(i, dict)]
-          refs = [r for r in refs if r]
+          # Skip Omni's built-in attributes: they are populated by the platform
+          # and not returned as user attributes, so setting one drifts forever.
+          refs = [r for r in refs if r and not r.startswith('omni_')]
           print(refs[0] if refs else '')
           ")
 
           if [ -z "$REF" ]; then
-            echo "SKIP: no user attribute defined on this instance, so nothing to set"
+            echo "SKIP: this instance has no user-defined attribute, only Omni built-ins."
+            echo "TC-03b and TC-13b remain UNTESTED. Create one attribute under"
+            echo "Settings > User attributes and re-run to close them."
+            echo "::warning::TC-03b/TC-13b skipped: no user-defined attribute on the instance"
             exit 0
           fi
           echo "using attribute reference: $REF"
@@ -299,7 +310,7 @@ jobs:
           code=$?
           set -e
           [ $code -eq 0 ] && echo "PASS: attribute round-trips with no drift" \
-                          || { echo "FAIL: drift on the attribute (exit $code)"; }
+                          || { echo "FAIL: drift on the attribute (exit $code)"; exit 1; }
 
           terraform apply -auto-approve -var 'v=second' >/dev/null
           echo "PASS TC-13b: attribute value changed in place"
@@ -308,6 +319,7 @@ jobs:
 
       - name: TC-14b removing the only group member leaves the group in place
         run: |
+          set -o pipefail
           mkdir -p "${RUNNER_TEMP}/tc14b" && cd "${RUNNER_TEMP}/tc14b"
           cat > main.tf <<EOF
           terraform {
@@ -344,6 +356,7 @@ jobs:
       - name: TC-08b/TC-18b/TC-18c/TC-28b connection lifecycle
         if: inputs.test_connection
         run: |
+          set -o pipefail
           mkdir -p "${RUNNER_TEMP}/conn" && cd "${RUNNER_TEMP}/conn"
           cat > main.tf <<EOF
           terraform {
@@ -372,9 +385,9 @@ jobs:
           set -e
           if [ $code -ne 0 ]; then
             cat err.txt
-            echo "NOTE TC-08b: the API validates connectivity on create, so this resource"
-            echo "cannot be exercised without a reachable warehouse. Recorded, not a pass."
-            exit 0
+            echo "FAIL TC-08b: create failed. Edge run 1 established that the API does not"
+            echo "validate connectivity on create, so this is a regression, not an expectation."
+            exit 1
           fi
           echo "PASS TC-08b: connection created"
 
@@ -382,7 +395,8 @@ jobs:
           terraform plan -detailed-exitcode -var 'base_role=NO_ACCESS' -var 'host=db.invalid.example' -out=/dev/null
           rc=$?
           set -e
-          [ $rc -eq 0 ] && echo "PASS: connection reads back with no drift" || echo "FAIL: drift after create"
+          [ $rc -eq 0 ] && echo "PASS: connection reads back with no drift" \
+                       || { echo "FAIL: drift after create (exit $rc)"; exit 1; }
 
           terraform apply -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
           echo "PASS TC-18b: base_role changed in place"
@@ -390,7 +404,7 @@ jobs:
           terraform plan -no-color -var 'base_role=QUERIER' -var 'host=other.invalid.example' \
             | tee replace.txt | grep -q "must be replaced\|forces replacement" \
             && echo "PASS TC-18c: changing host forces replacement" \
-            || echo "FAIL TC-18c: host change did not force replacement"
+            || { echo "FAIL TC-18c: host change did not force replacement"; exit 1; }
 
           terraform destroy -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
           echo "PASS TC-28b: connection destroyed"
