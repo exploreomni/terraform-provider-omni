@@ -22,7 +22,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: provider-edge-test
+  # Shared with the other suites on purpose. Two runs against one instance
+  # compete for the 60 requests a minute limit, and a rate-limited curl looks
+  # like a test failure rather than what it is.
+  group: omni-instance
   cancel-in-progress: false
 
 jobs:
@@ -278,9 +281,27 @@ jobs:
       - name: TC-03b/TC-13b user attributes, using one discovered on the instance
         run: |
           set -o pipefail
-          REF=$(curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
-            "$OMNI_BASE_URL/api/v1/user-attributes" \
-          | python3 -c "
+          # Retry rather than crash: a rate-limited or transient response leaves
+          # curl with empty output, which is not the same as "no attributes".
+          BODY=""
+          for attempt in 1 2 3; do
+            CODE=$(curl -s -o /tmp/attrs.json -w '%{http_code}' \
+              -H "Authorization: Bearer $OMNI_API_TOKEN" \
+              "$OMNI_BASE_URL/api/v1/user-attributes")
+            if [ "$CODE" = "200" ]; then
+              BODY=$(cat /tmp/attrs.json)
+              break
+            fi
+            echo "attempt ${attempt}: user-attributes returned ${CODE}, retrying"
+            sleep 10
+          done
+
+          if [ -z "$BODY" ]; then
+            echo "FAIL: could not read /v1/user-attributes after 3 attempts (last status ${CODE})"
+            exit 1
+          fi
+
+          REF=$(printf '%s' "$BODY" | python3 -c "
           import sys, json
           d = json.load(sys.stdin)
           items = d if isinstance(d, list) else (d.get('records') or d.get('userAttributes') or d.get('results') or [])
