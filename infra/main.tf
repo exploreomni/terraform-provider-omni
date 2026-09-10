@@ -32,6 +32,12 @@ resource "omni_folder" "finance" {
   parent_folder_id = omni_folder.reporting.id
 }
 
+resource "omni_folder" "finance3" {
+  name             = "Finance3"
+  parent_folder_id = omni_folder.reporting.id
+}
+
+
 resource "omni_user_group" "finance" {
   display_name = "Finance"
 }
