@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and fill in for your instance.
+
+# An existing connection the test model is built on.
+connection_name = "ecommerce dev"
+
+# An existing SHARED model to extend.
+base_model_name = "ci-validate-27355042357"
+
+# Must not be a real person: the suite creates and deletes this user.
+test_user_email = "tf-provider-test@example.invalid"
+
+# Reference of an existing user attribute, or leave empty to skip that check.
+user_attribute_key = ""
+
+# omni_connection needs real warehouse credentials, so it is off by default.
+test_connection     = false
+connection_dialect  = "postgres"
+connection_host     = ""
+connection_database = ""
+connection_username = ""
+connection_password = ""

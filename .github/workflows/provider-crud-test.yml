@@ -1,0 +1,227 @@
+name: provider crud test
+
+# Manual only. This creates and deletes real users, groups, models and folders
+# on the target instance, so it must never fire automatically on a push or PR.
+on:
+  workflow_dispatch:
+    inputs:
+      connection_name:
+        description: "Existing connection the test model is built on"
+        required: true
+        default: "ecommerce dev"
+      base_model_name:
+        description: "Existing SHARED model to extend"
+        required: true
+        default: "ci-validate-27355042357"
+      test_user_email:
+        description: "Email for the test user (must not be a real person)"
+        required: true
+        default: "tf-provider-test@example.invalid"
+      user_attribute_key:
+        description: "Reference of an existing user attribute, or blank to skip"
+        required: false
+        default: ""
+      destroy:
+        description: "Destroy at the end"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two runs against one instance would collide on names and roles.
+  group: provider-crud-test
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: test
+
+jobs:
+  crud:
+    runs-on: ubuntu-latest
+    environment: omni-playground
+    env:
+      OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+      OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+
+      - name: Build provider into a filesystem mirror
+        working-directory: .
+        run: |
+          VERSION=0.1.0
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
+          mkdir -p "$MIRROR"
+          go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
+          cat >> ~/.terraformrc <<TFRC
+
+          provider_installation {
+            filesystem_mirror {
+              path    = "${RUNNER_TEMP}/plugins"
+              include = ["registry.terraform.io/ashima-omni/omni"]
+            }
+            direct {
+              exclude = ["registry.terraform.io/ashima-omni/omni"]
+            }
+          }
+          TFRC
+
+      - name: Write tfvars
+        run: |
+          cat > terraform.tfvars <<TFVARS
+          connection_name    = "${{ inputs.connection_name }}"
+          base_model_name    = "${{ inputs.base_model_name }}"
+          test_user_email    = "${{ inputs.test_user_email }}"
+          user_attribute_key = "${{ inputs.user_attribute_key }}"
+          test_connection    = false
+          TFVARS
+          cat terraform.tfvars
+
+      # State is local to this runner and thrown away when the job ends. That
+      # is correct here only because the job always destroys before finishing.
+      # If destroy fails, the created objects are orphaned with no state, and
+      # the log prints their IDs so they can be removed by hand.
+      - name: TC-00 init and validate
+        run: |
+          terraform init -input=false
+          terraform validate
+
+      - name: TC-01..08 create
+        run: terraform apply -auto-approve
+
+      - name: Record IDs for post-destroy verification
+        id: ids
+        run: |
+          terraform output -json ids > "${RUNNER_TEMP}/ids.json"
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          ids = json.load(open(os.environ["RUNNER_TEMP"] + "/ids.json"))
+          for k, v in ids.items():
+              if v:
+                  print(f"ID_{k.upper()}={v}")
+          PY
+          cat "${RUNNER_TEMP}/ids.json"
+
+      - name: TC-09 read round-trips with no drift
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -out=/dev/null
+          code=$?
+          set -e
+          case $code in
+            0) echo "PASS: no drift after create" ;;
+            2) echo "FAIL: drift detected after create"; exit 1 ;;
+            *) echo "FAIL: plan errored"; exit 1 ;;
+          esac
+
+      - name: TC-10 data sources resolve to the created objects
+        run: |
+          terraform output -json data_sources | tee ds.json
+          python3 - <<'PY'
+          import json, sys
+          ds = json.load(open("ds.json"))
+          failures = [k for k in ("user_ids_match", "group_ids_match") if not ds.get(k)]
+          for k, v in ds.items():
+              print(f"  {k}: {v}")
+          if failures:
+              sys.exit("FAIL: data source mismatch: " + ", ".join(failures))
+          print("PASS: data sources resolve correctly")
+          PY
+
+      - name: TC-11..18 update
+        run: |
+          terraform apply -auto-approve \
+            -var 'suffix=v2' \
+            -var 'role_name=VIEWER' \
+            -var 'topic_description=Updated by the Terraform provider test suite.'
+
+      - name: TC-19 read round-trips after update
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -out=/dev/null \
+            -var 'suffix=v2' \
+            -var 'role_name=VIEWER' \
+            -var 'topic_description=Updated by the Terraform provider test suite.'
+          code=$?
+          set -e
+          case $code in
+            0) echo "PASS: no drift after update" ;;
+            2) echo "FAIL: drift detected after update"; exit 1 ;;
+            *) echo "FAIL: plan errored"; exit 1 ;;
+          esac
+
+      - name: TC-11 confirm the rename reached the API
+        run: |
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/folders?pageSize=100" \
+          | python3 -c "
+          import sys, json, os
+          want = os.environ['ID_FOLDER_PARENT']
+          rec = [f for f in json.load(sys.stdin)['records'] if f['id'] == want]
+          if not rec:
+              sys.exit('FAIL: renamed folder not found')
+          f = rec[0]
+          print('  name:', f['name'], ' path:', f['path'])
+          if not f['name'].endswith('v2'):
+              sys.exit('FAIL: rename did not reach the API')
+          print('PASS: rename confirmed server side')
+          "
+
+      # Always destroy, even if an earlier step failed. Without this, a failure
+      # leaves objects on the instance with no state to clean them up from.
+      - name: TC-21..28 destroy
+        if: always() && inputs.destroy
+        run: |
+          terraform destroy -auto-approve \
+            -var 'suffix=v2' \
+            -var 'role_name=VIEWER' \
+            -var 'topic_description=Updated by the Terraform provider test suite.'
+
+      - name: TC-25..28 verify what could not truly be deleted
+        if: always() && inputs.destroy
+        run: |
+          echo "### Post-destroy verification" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "TC-27 user role should read NO_ACCESS:"
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/users/${ID_USER}/model-roles" \
+          | python3 -m json.tool || echo "  (user was deleted, roles gone with it)"
+
+          echo "TC-25 model should carry deletedAt:"
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/models?pageSize=100" \
+          | python3 -c "
+          import sys, json, os
+          want = os.environ.get('ID_MODEL')
+          hit = [m for m in json.load(sys.stdin)['records'] if m['id'] == want]
+          print('  still listed as active' if hit else '  absent from the active list (archived)')
+          "
+
+          echo "TC-23 user should be gone:"
+          curl -s -o /dev/null -w '  GET user returned %{http_code}\n' \
+            -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/scim/v2/users/${ID_USER}"
+
+      - name: Orphan warning
+        if: failure()
+        run: |
+          echo "Destroy may not have completed. Objects created by this run:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "${RUNNER_TEMP}/ids.json" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "{}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Remove any that survive by hand." >> "$GITHUB_STEP_SUMMARY"
