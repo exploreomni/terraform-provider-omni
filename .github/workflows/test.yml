@@ -38,8 +38,10 @@ jobs:
       # file does not error: the workflow simply disappears from the list.
       - name: Lint workflows
         run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          ./actionlint -color
+          # Installed with Go rather than the curl-to-bash script: this job
+          # already has a toolchain, and process substitution is fragile in CI.
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          "$(go env GOPATH)/bin/actionlint" -color
 
       - name: go.mod is tidy
         run: |
