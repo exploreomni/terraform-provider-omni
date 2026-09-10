@@ -147,16 +147,14 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var 'suffix=v2' \
-            -var 'role_name=VIEWER' \
-            -var 'topic_description=Updated by the Terraform provider test suite.'
+            -var 'role_name=VIEWER'
 
       - name: TC-19 read round-trips after update
         run: |
           set +e
           terraform plan -detailed-exitcode -out=/dev/null \
             -var 'suffix=v2' \
-            -var 'role_name=VIEWER' \
-            -var 'topic_description=Updated by the Terraform provider test suite.'
+            -var 'role_name=VIEWER'
           code=$?
           set -e
           case $code in
@@ -189,8 +187,7 @@ jobs:
         run: |
           terraform destroy -auto-approve \
             -var 'suffix=v2' \
-            -var 'role_name=VIEWER' \
-            -var 'topic_description=Updated by the Terraform provider test suite.'
+            -var 'role_name=VIEWER'
 
       - name: TC-25..28 verify what could not truly be deleted
         if: always() && inputs.destroy
