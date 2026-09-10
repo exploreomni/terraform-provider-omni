@@ -228,6 +228,14 @@ func (r *folderResource) Update(ctx context.Context, req resource.UpdateRequest,
 			resp.Diagnostics.AddError("Unable to update Omni folder", err.Error())
 			return
 		}
+
+		// The update response omits url, which only the list endpoint returns,
+		// and a path change alters the url. Read the folder back so url tracks
+		// the new path instead of reverting to null.
+		if refreshed, err := r.client.GetFolder(ctx, state.ID.ValueString(), state.Scope.ValueString(), state.OwnerID.ValueString()); err == nil {
+			updated = refreshed
+		}
+
 		applyFolderToState(&next, updated)
 	}
 
@@ -273,8 +281,19 @@ func applyFolderToState(state *folderResourceModel, folder *client.Folder) {
 	if folder.Name != "" {
 		state.Name = types.StringValue(folder.Name)
 	}
-	state.Path = stringOrNull(folder.Path)
-	state.URL = stringOrNull(folder.URL)
+	// Responses vary by endpoint: create and update omit url, and update omits
+	// scope. Only take values the response actually carried, so a partial
+	// response cannot null out something Terraform already knows.
+	if folder.Path != "" {
+		state.Path = types.StringValue(folder.Path)
+	} else if state.Path.IsUnknown() {
+		state.Path = types.StringNull()
+	}
+	if folder.URL != "" {
+		state.URL = types.StringValue(folder.URL)
+	} else if state.URL.IsUnknown() {
+		state.URL = types.StringNull()
+	}
 	if folder.Scope != "" {
 		state.Scope = types.StringValue(folder.Scope)
 	}

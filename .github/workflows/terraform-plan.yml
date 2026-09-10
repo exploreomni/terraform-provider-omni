@@ -1,0 +1,124 @@
+name: terraform plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - "internal/**"
+      - "main.go"
+      - ".github/workflows/terraform-*.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+defaults:
+  run:
+    working-directory: infra
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The provider is not published yet, so CI builds it from this repo and
+      # points Terraform at the local binary. Once v0.1.0 is on the registry,
+      # delete this step and the dev override below.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Build provider into a filesystem mirror
+        working-directory: .
+        run: |
+          # terraform init always queries the registry, even with dev_overrides,
+          # and this provider is not published yet. A filesystem mirror gives
+          # init a local source that satisfies it. Replace this whole step with
+          # a normal registry install once v0.1.0 is published.
+          #
+          # This must run AFTER setup-terraform: that action writes its own
+          # ~/.terraformrc for the HCP credentials, so we append to it rather
+          # than being overwritten by it.
+          VERSION=0.1.0
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
+          mkdir -p "$MIRROR"
+          go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
+          cat >> ~/.terraformrc <<TFRC
+
+          provider_installation {
+            filesystem_mirror {
+              path    = "${RUNNER_TEMP}/plugins"
+              include = ["registry.terraform.io/ashima-omni/omni"]
+            }
+            direct {
+              exclude = ["registry.terraform.io/ashima-omni/omni"]
+            }
+          }
+          TFRC
+          echo "--- ~/.terraformrc ---"
+          sed 's/token *= *".*"/token = "REDACTED"/' ~/.terraformrc
+
+      - name: Init
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+        run: terraform init -input=false
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Validate
+        env:
+          OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+        run: terraform validate || true
+
+      - name: Plan
+        id: plan
+        env:
+          OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+        run: |
+          set -o pipefail
+          terraform plan -no-color -input=false -lock-timeout=5m 2>&1 | tee plan.txt
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = '';
+            try {
+              plan = fs.readFileSync('infra/plan.txt', 'utf8');
+            } catch (e) {
+              plan = 'Plan did not produce output. See the job log.';
+            }
+            const max = 60000;
+            if (plan.length > max) {
+              plan = plan.slice(0, max) + '\n\n... truncated, see the job log for the full plan.';
+            }
+            const body = [
+              '### Terraform plan - `${{ steps.plan.outcome }}`',
+              '',
+              '<details><summary>Show plan</summary>',
+              '',
+              '```terraform',
+              plan,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

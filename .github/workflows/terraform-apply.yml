@@ -1,0 +1,93 @@
+name: terraform apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "internal/**"
+      - "main.go"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: infra
+
+concurrency:
+  # One apply at a time. A second merge waits rather than racing for the lock.
+  group: terraform-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    # Configure this environment in Settings > Environments with a required
+    # reviewer if you want a human approval gate between merge and apply.
+    environment: omni-playground
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Build provider into a filesystem mirror
+        working-directory: .
+        run: |
+          # terraform init always queries the registry, even with dev_overrides,
+          # and this provider is not published yet. A filesystem mirror gives
+          # init a local source that satisfies it. Replace this whole step with
+          # a normal registry install once v0.1.0 is published.
+          #
+          # This must run AFTER setup-terraform: that action writes its own
+          # ~/.terraformrc for the HCP credentials, so we append to it rather
+          # than being overwritten by it.
+          VERSION=0.1.0
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
+          mkdir -p "$MIRROR"
+          go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
+          cat >> ~/.terraformrc <<TFRC
+
+          provider_installation {
+            filesystem_mirror {
+              path    = "${RUNNER_TEMP}/plugins"
+              include = ["registry.terraform.io/ashima-omni/omni"]
+            }
+            direct {
+              exclude = ["registry.terraform.io/ashima-omni/omni"]
+            }
+          }
+          TFRC
+          echo "--- ~/.terraformrc ---"
+          sed 's/token *= *".*"/token = "REDACTED"/' ~/.terraformrc
+
+      - name: Init
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+        run: terraform init -input=false
+
+      - name: Apply
+        env:
+          OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+        run: terraform apply -auto-approve -input=false -lock-timeout=5m
+
+      - name: Outputs
+        env:
+          OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+        run: |
+          echo '### Omni resource IDs' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          terraform output -json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
