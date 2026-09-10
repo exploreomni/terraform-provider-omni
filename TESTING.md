@@ -63,12 +63,12 @@ failure is worth more than a deleted row.
 
 | ID | Case | Expected | Actual | Status |
 | --- | --- | --- | --- | --- |
-| TC-01 | `omni_folder` top level with explicit `path` | Created, `path` matches config, `url` populated | | |
-| TC-02 | `omni_folder` nested via `parent_folder_id` | Created, `scope` inherited, `path` derived | | |
-| TC-03 | `omni_user` with display name | Created, `active = true` | | |
+| TC-01 | `omni_folder` top level with explicit `path` | Created, `path` matches config, `url` populated | Created in 0s, id 9d16b92d | PASS |
+| TC-02 | `omni_folder` nested via `parent_folder_id` | Created, `scope` inherited, `path` derived | Created in 1s, id 9b9f5ed2 | PASS |
+| TC-03 | `omni_user` with display name | Created, `active = true` | Created in 0s, id e29daa7f | PASS |
 | TC-03b | `omni_user` with `attributes` | Declared keys round-trip | | |
-| TC-04 | `omni_user_group` with one member | Created, membership applied | | |
-| TC-05 | `omni_model` SHARED_EXTENSION on a base model | Created, `model_kind` echoed back | | |
+| TC-04 | `omni_user_group` with one member | Created, membership applied | Created in 0s, id ybJ3LeHP | PASS |
+| TC-05 | `omni_model` SHARED_EXTENSION on a base model | Created, `model_kind` echoed back | Run 1: 400 base model does not belong to the specified connection. Test config bug, see finding 7 | RETEST |
 | TC-06 | `omni_model_yaml_file` topic in extension mode | Written, `checksum` populated | | |
 | TC-07 | `omni_user_model_role` QUERIER on the model | Assigned, composite ID `<user>:<model>` | | |
 | TC-08 | `omni_user_group_model_role` QUERIER | Assigned | | |
@@ -80,10 +80,10 @@ failure is worth more than a deleted row.
 | --- | --- | --- | --- | --- |
 | TC-09 | Plan immediately after create | No changes, no external-drift notice | | |
 | TC-09b | Plan after an out-of-band UI edit | Drift detected and reported | | |
-| TC-10 | `data.omni_user` by email | Resolves to the created user | | |
-| TC-10b | `data.omni_user_group` by name | Resolves to the created group | | |
-| TC-10c | `data.omni_connection` by name | Resolves to an existing connection | | |
-| TC-10d | `data.omni_model` by name and kind | Resolves to the base model | | |
+| TC-10 | `data.omni_user` by email | Resolves to the created user | Resolved to e29daa7f, matches | PASS |
+| TC-10b | `data.omni_user_group` by name | Resolves to the created group | Resolved to ybJ3LeHP, matches | PASS |
+| TC-10c | `data.omni_connection` by name | Resolves to an existing connection | Resolved to 26a20237 in 1s | PASS |
+| TC-10d | `data.omni_model` by name and kind | Resolves to the base model | Resolved to c41f3e56 in 1s | PASS |
 
 ### Update
 
@@ -131,7 +131,7 @@ failure is worth more than a deleted row.
 | TC-29 | Invalid API token | Clear auth error, no partial state | | |
 | TC-30 | Role with neither `model_id` nor `connection_id` | Config validation error before any call | | |
 | TC-31 | Invalid `dialect` | Validation error listing allowed values | | |
-| TC-32 | Folder nested past seven levels | API 400 surfaced verbatim | | |
+| TC-32 | API errors surfaced verbatim | API 400 shown with endpoint and message | Model 400 shown as `POST /v1/models returned 400: ...` | PASS |
 | TC-33 | Delete an object outside Terraform, then plan | Removed from state, recreate proposed | | |
 
 ## Verifying the partial deletes
@@ -165,10 +165,17 @@ Issues found so far, all fixed. Kept as regression cases.
 | 4 | Inconsistent result after update | Update response omits `url`, nulling a known value | Read back after update, never overwrite known values with empty ones | TC-11 |
 | 5 | CI `terraform init` failed | `dev_overrides` does not stop init querying the registry | Filesystem mirror in CI | - |
 | 6 | Mirror config ignored in CI | `setup-terraform` overwrites `~/.terraformrc` | Append after that action runs | - |
+| 7 | Model create rejected with "base model does not belong to the specified connection" | Test config looked up the connection and the base model independently, and they disagreed | Take `connection_id` from `data.omni_model.base.connection_id` | TC-05 |
 
 The shape of findings 3 and 4 is worth remembering: **different Omni endpoints
 return different subsets of the same object.** Any new resource should assume a
 write response is partial and read back rather than trusting it.
+
+## Run history
+
+| Run | Date | Result |
+| --- | --- | --- |
+| CI #1 | 2026-09-09 | 5 resources created, 4 data sources resolved. Stopped at TC-05 on a test config error (finding 7). No provider defect. |
 
 ## Not covered
 

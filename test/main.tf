@@ -24,6 +24,8 @@ provider "omni" {}
 # Data sources: look up things that already exist.
 # --------------------------------------------------------------------------
 
+# Exercised purely as a data source lookup (TC-10c). The test model takes its
+# connection from the base model instead, so the two cannot disagree.
 data "omni_connection" "existing" {
   name = var.connection_name
 }
@@ -83,10 +85,14 @@ data "omni_user_group" "by_name" {
 # --------------------------------------------------------------------------
 
 resource "omni_model" "extension" {
-  name          = "tf_test_ext_${var.suffix}"
-  model_kind    = "SHARED_EXTENSION"
-  connection_id = data.omni_connection.existing.id
+  name       = "tf_test_ext_${var.suffix}"
+  model_kind = "SHARED_EXTENSION"
+
+  # The connection must be the one the base model belongs to, so take it from
+  # the base model rather than looking it up separately. Two independent
+  # lookups can disagree, and the API rejects the mismatch.
   base_model_id = data.omni_model.base.id
+  connection_id = data.omni_model.base.connection_id
 }
 
 resource "omni_model_yaml_file" "topic" {
@@ -109,14 +115,14 @@ resource "omni_model_yaml_file" "topic" {
 resource "omni_user_model_role" "test" {
   user_id       = omni_user.test.id
   model_id      = omni_model.extension.id
-  connection_id = data.omni_connection.existing.id
+  connection_id = data.omni_model.base.connection_id
   role_name     = var.role_name
 }
 
 resource "omni_user_group_model_role" "test" {
   user_group_id = omni_user_group.test.id
   model_id      = omni_model.extension.id
-  connection_id = data.omni_connection.existing.id
+  connection_id = data.omni_model.base.connection_id
   role_name     = var.role_name
 }
 
