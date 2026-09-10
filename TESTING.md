@@ -164,6 +164,7 @@ Issues found so far, all fixed. Kept as regression cases.
 | 7 | Model create rejected with "base model does not belong to the specified connection" | Test config looked up the connection and the base model independently, and they disagreed | Take `connection_id` from `data.omni_model.base.connection_id` | TC-05 |
 | 8 | Model YAML read failed: cannot unmarshal object into `[]client.YAMLFile` | `GET /v1/models/{id}/yaml` returns `files` as an object keyed by filename, not an array | Resource removed from the provider; model content belongs to git sync | - |
 | 10 | Roles reported as deleted on every refresh | List response wraps entries in `results`, not `modelRoles`/`records`, and marks origin via `from.type` rather than a flat `source` | Parse `results`; match only entries whose `from.type` is the expected direct-assignment type | TC-09 |
+| 12 | Inconsistent result updating a child folder when its parent is renamed | Renaming a parent rewrites every descendant path server side, but `path` and `url` carried `UseStateForUnknown`, so Terraform planned them to stay put | Removed those modifiers: both are derived from ancestors and must be free to change | TC-12 |
 | 11 | `NO_ACCESS` on destroy does not necessarily revoke access | Omni resolves roles by priority. A direct assignment is priority 0; the connection base role is 150 and wins, so the destroyed assignment shows `resolved: false` | Documented on `role_on_destroy`. Set the connection `base_role` to `NO_ACCESS` if destroy must revoke | TC-27 |
 | 9 | CI build failed with "updates to go.mod needed" | Removing the yaml resource changed the dependency graph. CI builds with `-mod=readonly`; the local environment had `-mod=mod`, which hid it | `go mod tidy`, plus a tidiness gate in the test workflow | - |
 
@@ -179,6 +180,8 @@ write response is partial and read back rather than trusting it.
 | CI #2 | 2026-09-09 | Create, no-drift read, data sources, update and server-side rename all passed for 7 resources. Failed at destroy on the model YAML read (finding 8). Objects orphaned and removed by hand. |
 | CI #3 | 2026-09-09 | Failed at the build step: stale `go.mod` (finding 9) and leftover `topic_description` vars in the workflow. No provider code exercised. |
 | CI #4 | 2026-09-10 | 7 resources created, all 4 data sources matched, destroy removed 5 cleanly with correct ordering, and post-destroy state verified server side. One failure: drift on both role resources (finding 10). |
+| CI #5 | 2026-09-10 | User role drift fixed. Group role still drifted: the label is `Group Role`, not `User Group Role`. |
+| CI #6 | 2026-09-10 | **TC-09 passed: no drift after create.** Both role resources read cleanly, data sources matched. Failed in the update phase on the child folder path cascade (finding 12). |
 
 ## Not covered
 

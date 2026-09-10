@@ -62,8 +62,9 @@ func (r *folderResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Optional: true,
 				Computed: true,
 				MarkdownDescription: "URL path segment for the folder. Lowercased by the API, and limited to " +
-					"alphanumeric characters and dashes. Changing it updates every descendant folder path.",
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+					"alphanumeric characters and dashes. Changing it updates every descendant folder path.\n\n" +
+					"No `UseStateForUnknown` here on purpose: renaming a parent rewrites every descendant's " +
+					"path server side, so a child's path cannot be assumed to survive an update unchanged.",
 			},
 			"parent_folder_id": schema.StringAttribute{
 				Optional:            true,
@@ -110,9 +111,9 @@ func (r *folderResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 					"sub-folders (`force=true`). Defaults to `false`, which fails on a non-empty folder.",
 			},
 			"url": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Direct link to the folder in the Omni UI.",
-				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				Computed: true,
+				MarkdownDescription: "Direct link to the folder in the Omni UI. Derived from the path, so it " +
+					"changes when an ancestor folder is renamed.",
 			},
 		},
 	}
