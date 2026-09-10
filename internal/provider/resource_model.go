@@ -210,16 +210,37 @@ func (r *modelResource) ImportState(ctx context.Context, req resource.ImportStat
 	resource.ImportStatePassthroughID(ctx, pathRoot("id"), req, resp)
 }
 
+// applyModelToState takes only the fields a response actually carried. Write
+// responses are partial across this API, so an absent field must never null out
+// something Terraform already knows.
 func applyModelToState(state *modelResourceModel, model *client.Model) {
-	state.ID = types.StringValue(model.ID)
+	if model.ID != "" {
+		state.ID = types.StringValue(model.ID)
+	}
 	if model.Name != "" {
 		state.Name = types.StringValue(model.Name)
 	}
 	if model.ModelKind != "" {
 		state.ModelKind = types.StringValue(model.ModelKind)
 	}
-	state.ConnectionID = stringOrNull(model.ConnectionID)
-	state.BaseModelID = stringOrNull(model.BaseModelID)
-	state.CreatedAt = stringOrNull(model.CreatedAt)
-	state.UpdatedAt = stringOrNull(model.UpdatedAt)
+	if model.ConnectionID != "" {
+		state.ConnectionID = types.StringValue(model.ConnectionID)
+	} else if state.ConnectionID.IsUnknown() {
+		state.ConnectionID = types.StringNull()
+	}
+	if model.BaseModelID != "" {
+		state.BaseModelID = types.StringValue(model.BaseModelID)
+	} else if state.BaseModelID.IsUnknown() {
+		state.BaseModelID = types.StringNull()
+	}
+	if model.CreatedAt != "" {
+		state.CreatedAt = types.StringValue(model.CreatedAt)
+	} else if state.CreatedAt.IsUnknown() {
+		state.CreatedAt = types.StringNull()
+	}
+	if model.UpdatedAt != "" {
+		state.UpdatedAt = types.StringValue(model.UpdatedAt)
+	} else if state.UpdatedAt.IsUnknown() {
+		state.UpdatedAt = types.StringNull()
+	}
 }

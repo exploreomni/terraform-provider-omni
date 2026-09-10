@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -191,21 +192,34 @@ func (c *Client) CreateModel(ctx context.Context, in ModelInput) (*Model, error)
 }
 
 // RenameModel renames a model. Workbook and query models cannot be renamed.
+//
+// The PATCH response shape is not dependable: it may be the model, may wrap it
+// under "model", and may be empty. There is no get-by-id route for models, so
+// when the response yields no ID the model is located through the list
+// endpoint rather than returning a hollow object.
 func (c *Client) RenameModel(ctx context.Context, id, name string) (*Model, error) {
 	body := map[string]string{"name": name}
 
-	var out Model
-	if err := c.Patch(ctx, "/v1/models/"+url.PathEscape(id), body, &out); err != nil {
+	var raw json.RawMessage
+	if err := c.Patch(ctx, "/v1/models/"+url.PathEscape(id), body, &raw); err != nil {
 		return nil, err
 	}
-	if out.ID == "" {
-		// Some responses wrap the model.
-		var wrapped modelResponse
-		if err := c.Get(ctx, "/v1/models/"+url.PathEscape(id), nil, &wrapped); err == nil && wrapped.Model.ID != "" {
-			return &wrapped.Model, nil
-		}
+
+	var flat Model
+	if err := json.Unmarshal(raw, &flat); err == nil && flat.ID != "" {
+		return &flat, nil
 	}
-	return &out, nil
+
+	var wrapped modelResponse
+	if err := json.Unmarshal(raw, &wrapped); err == nil && wrapped.Model.ID != "" {
+		return &wrapped.Model, nil
+	}
+
+	refreshed, err := c.GetModel(ctx, id, "")
+	if err != nil {
+		return nil, fmt.Errorf("model renamed but could not be read back: %w", err)
+	}
+	return refreshed, nil
 }
 
 // DeleteModel archives a shared or shared extension model (soft delete).

@@ -46,8 +46,9 @@ type Meta struct {
 // SCIM schema URNs. PUT replaces the whole resource and the spec requires the
 // schemas attribute on it; POST is accepted without one.
 const (
-	scimUserSchema  = "urn:ietf:params:scim:schemas:core:2.0:User"
-	scimGroupSchema = "urn:ietf:params:scim:schemas:core:2.0:Group"
+	scimUserSchema    = "urn:ietf:params:scim:schemas:core:2.0:User"
+	scimGroupSchema   = "urn:ietf:params:scim:schemas:core:2.0:Group"
+	scimPatchOpSchema = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
 )
 
 // UserInput is the create/replace body for a user.
@@ -161,26 +162,57 @@ func (c *Client) GetGroup(ctx context.Context, id string) (*Group, error) {
 	return &out, nil
 }
 
-// ReplaceGroup applies a SCIM PUT, replacing name and membership.
+// ReplaceGroup renames a group and sets its membership.
+//
+// This uses SCIM PATCH rather than PUT. The PUT route rejects a well-formed
+// body with "members: Required", and PATCH is what the Omni docs recommend for
+// renaming a group or changing its members.
 func (c *Client) ReplaceGroup(ctx context.Context, id string, in GroupInput) (*Group, error) {
-	if len(in.Schemas) == 0 {
-		in.Schemas = []string{scimGroupSchema}
-	}
-	// A nil slice marshals to null, which the API rejects as a missing field.
 	if in.Members == nil {
 		in.Members = []GroupMembr{}
 	}
 
+	patch := scimPatch{
+		Schemas: []string{scimPatchOpSchema},
+		Operations: []scimOperation{
+			{Op: "replace", Path: "displayName", Value: in.DisplayName},
+			{Op: "replace", Path: "members", Value: in.Members},
+		},
+	}
+
 	var out Group
-	if err := c.Put(ctx, "/scim/v2/groups/"+url.PathEscape(id), in, &out); err != nil {
+	if err := c.Patch(ctx, "/scim/v2/groups/"+url.PathEscape(id), patch, &out); err != nil {
 		// Group payloads carry no secrets, so echoing the body makes a
 		// rejection diagnosable instead of guesswork.
-		if body, mErr := json.Marshal(in); mErr == nil {
+		if body, mErr := json.Marshal(patch); mErr == nil {
 			return nil, fmt.Errorf("%w (request body: %s)", err, string(body))
 		}
 		return nil, err
 	}
+
+	// PATCH responses are sometimes empty. Read the group back so callers
+	// always get its current state.
+	if out.ID == "" {
+		refreshed, err := c.GetGroup(ctx, id)
+		if err == nil {
+			return refreshed, nil
+		}
+		out.ID = id
+		out.DisplayName = in.DisplayName
+	}
 	return &out, nil
+}
+
+// scimPatch is a SCIM 2.0 patch request.
+type scimPatch struct {
+	Schemas    []string        `json:"schemas"`
+	Operations []scimOperation `json:"Operations"`
+}
+
+type scimOperation struct {
+	Op    string `json:"op"`
+	Path  string `json:"path,omitempty"`
+	Value any    `json:"value,omitempty"`
 }
 
 // DeleteGroup removes a user group.
