@@ -117,6 +117,18 @@ jobs:
           PY
           cat "${RUNNER_TEMP}/ids.json"
 
+      # Prints the raw model-roles responses. The from.type labels are not
+      # documented and differ between the two endpoints, so this is how we know
+      # what the provider has to match on.
+      - name: TC-07/08 role assignments as the API reports them
+        run: |
+          echo "--- user model roles ---"
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/users/${ID_USER}/model-roles" | python3 -m json.tool
+          echo "--- user group model roles ---"
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/user-groups/${ID_USER_GROUP}/model-roles" | python3 -m json.tool
+
       - name: TC-09 read round-trips with no drift
         run: |
           set +e

@@ -126,16 +126,28 @@ func findModelRole(roles []client.ModelRole, modelID, connectionID, wantSource s
 		}
 
 		source := role.SourceType()
-		if strings.Contains(strings.ToLower(source), "base role") {
-			// The connection default, not something Terraform assigned.
+		lowered := strings.ToLower(source)
+
+		// The connection default, not something Terraform assigned.
+		if strings.Contains(lowered, "base role") {
 			continue
 		}
+
+		// An exact match on the expected origin is the assignment we made.
 		if strings.EqualFold(source, wantSource) {
 			return &roles[i]
 		}
-		if fallback == nil && source == "" {
-			// Older responses without a from block: take it, but only if
-			// nothing better turns up.
+
+		// A role a user inherits from a group is not their direct assignment,
+		// so it must never satisfy a user role resource.
+		if wantSource == sourceUserRole && strings.Contains(lowered, "group") {
+			continue
+		}
+
+		// Anything else that is not a base role is a direct assignment on this
+		// endpoint. Kept as a fallback because the exact from.type labels are
+		// not documented and differ between the user and group endpoints.
+		if fallback == nil {
 			fallback = &roles[i]
 		}
 	}
