@@ -55,9 +55,13 @@ jobs:
       # the 60 requests a minute rate limit.
       max-parallel: 1
       matrix:
-        tool: [terraform, tofu]
-
-    if: inputs.tools == 'both' || inputs.tools == matrix.tool
+        # Built from the input rather than filtered with a job-level `if`:
+        # `matrix` is not available in that context, and referencing it there
+        # makes the whole workflow invalid.
+        tool: >-
+          ${{ inputs.tools == 'both'
+              && fromJSON('["terraform","tofu"]')
+              || fromJSON(format('["{0}"]', inputs.tools)) }}
 
     env:
       OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
