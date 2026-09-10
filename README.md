@@ -19,7 +19,6 @@ that layer in the same review process as the rest of your infrastructure.
 | ---------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
 | `omni_connection`            | `/v1/connections`                       | Credentials and `base_role` update in place; other changes replace     |
 | `omni_model`                 | `/v1/models`                            | `SHARED` and `SHARED_EXTENSION`; destroy archives to trash             |
-| `omni_model_yaml_file`       | `/v1/models/{id}/yaml`                  | One file per resource, with checksum conflict detection                |
 | `omni_folder`                | `/v1/folders`                           | Nesting up to seven levels                                             |
 | `omni_user`                  | `/scim/v2/users`                        | Organization API key required                                          |
 | `omni_user_group`            | `/scim/v2/groups`                       | Authoritative membership; organization API key required                |

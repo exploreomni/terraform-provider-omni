@@ -29,14 +29,6 @@ resource "omni_model" "finance" {
   connection_id = omni_connection.warehouse.id
 }
 
-resource "omni_model_yaml_file" "orders_topic" {
-  model_id       = omni_model.finance.id
-  file_name      = "orders.topic"
-  mode           = "extension"
-  yaml           = file("${path.module}/orders.topic.yaml")
-  commit_message = "terraform: manage orders topic"
-}
-
 resource "omni_folder" "finance" {
   name = "Finance"
   path = "finance"

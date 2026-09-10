@@ -6,7 +6,6 @@ output "ids" {
     user                 = omni_user.test.id
     user_group           = omni_user_group.test.id
     model                = omni_model.extension.id
-    model_yaml_file      = omni_model_yaml_file.topic.id
     user_model_role      = omni_user_model_role.test.id
     group_model_role     = omni_user_group_model_role.test.id
     connection           = try(omni_connection.test[0].id, null)
@@ -22,7 +21,6 @@ output "computed" {
     folder_child_scope = omni_folder.child.scope
     user_active        = omni_user.test.active
     model_kind         = omni_model.extension.model_kind
-    yaml_checksum      = omni_model_yaml_file.topic.checksum
   }
 }
 

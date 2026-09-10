@@ -81,7 +81,7 @@ data "omni_user_group" "by_name" {
 }
 
 # --------------------------------------------------------------------------
-# Model and model YAML.
+# Model. Model YAML is exercised separately, in test/yaml.
 # --------------------------------------------------------------------------
 
 resource "omni_model" "extension" {
@@ -93,18 +93,6 @@ resource "omni_model" "extension" {
   # lookups can disagree, and the API rejects the mismatch.
   base_model_id = data.omni_model.base.id
   connection_id = data.omni_model.base.connection_id
-}
-
-resource "omni_model_yaml_file" "topic" {
-  model_id  = omni_model.extension.id
-  file_name = "tf_test.topic"
-  mode      = "extension"
-
-  yaml = <<-YAML
-    # Managed by the Terraform provider test suite.
-    label: TF Test Topic
-    description: ${var.topic_description}
-  YAML
 }
 
 # --------------------------------------------------------------------------

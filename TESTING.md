@@ -42,7 +42,6 @@ A resource passes CRUD when all four hold:
 | `omni_user` | yes | yes | yes | yes | removed |
 | `omni_user_group` | yes | yes | yes | yes | removed |
 | `omni_model` | yes | yes | rename only | yes | archived to trash, recoverable |
-| `omni_model_yaml_file` | yes | yes | yes | partial | file emptied, no delete endpoint |
 | `omni_user_model_role` | yes | yes | yes | partial | downgraded to `NO_ACCESS` |
 | `omni_user_group_model_role` | yes | yes | yes | partial | downgraded to `NO_ACCESS` |
 | `omni_connection` | yes | yes | credentials and `base_role` | yes | removed |
@@ -69,7 +68,6 @@ failure is worth more than a deleted row.
 | TC-03b | `omni_user` with `attributes` | Declared keys round-trip | | |
 | TC-04 | `omni_user_group` with one member | Created, membership applied | Created in 0s, id ybJ3LeHP | PASS |
 | TC-05 | `omni_model` SHARED_EXTENSION on a base model | Created, `model_kind` echoed back | Run 1: 400 base model does not belong to the specified connection. Test config bug, see finding 7 | RETEST |
-| TC-06 | `omni_model_yaml_file` topic in extension mode | Written, `checksum` populated | | |
 | TC-07 | `omni_user_model_role` QUERIER on the model | Assigned, composite ID `<user>:<model>` | | |
 | TC-08 | `omni_user_group_model_role` QUERIER | Assigned | | |
 | TC-08b | `omni_connection` (opt in) | Created, ID returned | | |
@@ -96,7 +94,6 @@ failure is worth more than a deleted row.
 | TC-14 | Rename group | In place, membership preserved | | |
 | TC-14b | Remove the only group member | Membership emptied, group survives | | |
 | TC-15 | Rename model | In place via PATCH, ID unchanged | | |
-| TC-16 | Change YAML body | Rewritten, checksum changes | | |
 | TC-17 | Change role QUERIER to VIEWER | In place | | |
 | TC-18 | Change group role QUERIER to VIEWER | In place | | |
 | TC-18b | Change `omni_connection.base_role` | In place, no replacement | | |
@@ -119,7 +116,6 @@ failure is worth more than a deleted row.
 | TC-23 | Destroy user | Removed, gone from `GET /scim/v2/users` | | |
 | TC-24 | Destroy group | Removed | | |
 | TC-25 | Destroy model | Archived, `deletedAt` set, absent from active list | | |
-| TC-26 | Destroy YAML file | File emptied, verified via `GET /v1/models/{id}/yaml` | | |
 | TC-27 | Destroy user role | Downgraded to `NO_ACCESS`, verified via the API | | |
 | TC-28 | Destroy group role | Downgraded to `NO_ACCESS` | | |
 | TC-28b | Destroy connection | Removed | | |
@@ -182,6 +178,8 @@ write response is partial and read back rather than trusting it.
 - `omni_user_attribute` - the API exposes only `GET /v1/user-attributes`, so
   attribute definitions cannot be managed. Values on a user are covered by
   TC-03b.
+- Model YAML. Out of scope for this provider: Omni versions model content
+  through git sync, and a second writer would fight it.
 - Concurrent applies against one instance. The API rate limit is 60 requests a
   minute; use `-parallelism=5` for large configurations.
 - Embed users, schedules, dashboards and documents. Not implemented.

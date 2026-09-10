@@ -35,12 +35,6 @@ variable "user_attribute_key" {
   default     = ""
 }
 
-variable "topic_description" {
-  description = "Written into the test topic YAML. Changed to drive the update."
-  type        = string
-  default     = "Created by the Terraform provider test suite."
-}
-
 variable "test_connection" {
   description = "Whether to exercise omni_connection. Needs real warehouse credentials."
   type        = bool

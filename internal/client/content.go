@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 )
 
 // Folder is a content folder.
@@ -118,11 +117,12 @@ func (c *Client) ListFolders(ctx context.Context, scope, ownerID string) ([]Fold
 
 // GetFolder finds a folder by ID. The API has no get-by-id route for folders, so
 // this pages the list endpoint and matches on ID.
+//
+// ownerID is only sent for restricted scope, where an organization API key is
+// required to supply it. For organization scope an organization key returns
+// every folder when ownerID is omitted, but filters to a single user's folders
+// when it is present, which would hide the folder we are looking for.
 func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
-	// ownerID is only sent for restricted scope. For organization scope an
-	// organization API key returns every folder when ownerID is omitted, but
-	// filters to a single user's folders when it is present, which would hide
-	// the folder we are looking for.
 	if scope != "restricted" {
 		ownerID = ""
 	}
@@ -261,60 +261,5 @@ func (c *Client) GetModel(ctx context.Context, id, modelKind string) (*Model, er
 		Method:     http.MethodGet,
 		Path:       "/v1/models",
 		Message:    fmt.Sprintf("no model found with id %q", id),
-	}
-}
-
-// YAMLFileInput is the body for POST /v1/models/{modelId}/yaml.
-type YAMLFileInput struct {
-	FileName         string  `json:"fileName"`
-	YAML             string  `json:"yaml"`
-	Mode             string  `json:"mode"`
-	BranchID         *string `json:"branchId,omitempty"`
-	CommitMessage    *string `json:"commitMessage,omitempty"`
-	PreviousChecksum *string `json:"previousChecksum,omitempty"`
-	FullyResolved    *bool   `json:"fullyResolved,omitempty"`
-}
-
-// YAMLFile is a single model YAML file.
-type YAMLFile struct {
-	FileName string `json:"fileName"`
-	Content  string `json:"content"`
-	Checksum string `json:"checksum"`
-}
-
-type getModelYAMLResponse struct {
-	Files []YAMLFile `json:"files"`
-}
-
-// PutModelYAML creates or overwrites a model YAML file.
-func (c *Client) PutModelYAML(ctx context.Context, modelID string, in YAMLFileInput) error {
-	return c.Post(ctx, "/v1/models/"+url.PathEscape(modelID)+"/yaml", in, nil)
-}
-
-// GetModelYAMLFile retrieves a single YAML file from a model, with its checksum.
-func (c *Client) GetModelYAMLFile(ctx context.Context, modelID, fileName, mode, branchID string) (*YAMLFile, error) {
-	q := url.Values{}
-	q.Set("includeChecksums", strconv.FormatBool(true))
-	if mode != "" {
-		q.Set("mode", mode)
-	}
-	if branchID != "" {
-		q.Set("branchId", branchID)
-	}
-
-	var out getModelYAMLResponse
-	if err := c.Get(ctx, "/v1/models/"+url.PathEscape(modelID)+"/yaml", q, &out); err != nil {
-		return nil, err
-	}
-	for i := range out.Files {
-		if out.Files[i].FileName == fileName {
-			return &out.Files[i], nil
-		}
-	}
-	return nil, &APIError{
-		StatusCode: http.StatusNotFound,
-		Method:     http.MethodGet,
-		Path:       "/v1/models/" + modelID + "/yaml",
-		Message:    fmt.Sprintf("no YAML file named %q in model %q", fileName, modelID),
 	}
 }
