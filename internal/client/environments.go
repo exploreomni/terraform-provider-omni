@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 )
 
 // ConnectionEnvironment maps user attribute values to an alternate connection.
@@ -111,12 +112,35 @@ func connectionSchedulePath(connectionID, scheduleID string) string {
 }
 
 // CreateConnectionSchedule adds a schema refresh schedule to a connection.
+//
+// A connection's sub-resources are not addressable the instant the connection
+// is created: this endpoint can return 404 for a connection that GET
+// /v1/connections/{id} already serves. Terraform creates the two back to back,
+// so the 404 is retried rather than surfaced as a missing connection.
 func (c *Client) CreateConnectionSchedule(ctx context.Context, connectionID string, in ConnectionScheduleInput) (*ConnectionSchedule, error) {
-	var out ConnectionSchedule
-	if err := c.Post(ctx, connectionSchedulesPath(connectionID), in, &out); err != nil {
-		return nil, err
+	const attempts = 5
+
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt*3) * time.Second):
+			}
+		}
+
+		var out ConnectionSchedule
+		err := c.Post(ctx, connectionSchedulesPath(connectionID), in, &out)
+		if err == nil {
+			return &out, nil
+		}
+		lastErr = err
+		if !IsNotFound(err) {
+			return nil, err
+		}
 	}
-	return &out, nil
+	return nil, fmt.Errorf("connection %s was still not visible to the schedules endpoint after %d attempts: %w", connectionID, attempts, lastErr)
 }
 
 // GetConnectionSchedule fetches one schedule.
