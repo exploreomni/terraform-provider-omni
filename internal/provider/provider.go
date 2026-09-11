@@ -144,6 +144,10 @@ func (p *omniProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewConnectionResource,
 		NewFolderResource,
 		NewModelResource,
+		NewFolderPermissionResource,
+		NewDocumentPermissionResource,
+		NewConnectionEnvironmentResource,
+		NewConnectionScheduleResource,
 	}
 }
 

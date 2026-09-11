@@ -210,3 +210,42 @@ func TestListModelRolesParsesResultsShape(t *testing.T) {
 		t.Errorf("priority/resolved not parsed: %+v", roles[0])
 	}
 }
+
+func TestPermitSubjectResolution(t *testing.T) {
+	// The spec documents only that a permit carries a role, so the subject is
+	// resolved from whichever key the API uses. These are the plausible shapes.
+	cases := []struct {
+		name      string
+		body      string
+		wantID    string
+		wantGroup bool
+	}{
+		{"flat user id", `{"permits":[{"role":"VIEWER","userId":"u1"}]}`, "u1", false},
+		{"membership id", `{"permits":[{"role":"VIEWER","membershipId":"m1"}]}`, "m1", false},
+		{"flat group id", `{"permits":[{"role":"EDITOR","userGroupId":"g1"}]}`, "g1", true},
+		{"nested group", `{"permits":[{"role":"EDITOR","userGroup":{"id":"g2"}}]}`, "g2", true},
+		{"nested user", `{"permits":[{"role":"VIEWER","user":{"id":"u2"}}]}`, "u2", false},
+	}
+
+	for _, tc := range cases {
+		body := tc.body
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+
+		c := testClient(t, server.URL)
+		permits, err := c.ListFolderPermissions(context.Background(), "f1")
+		server.Close()
+
+		if err != nil {
+			t.Fatalf("%s: ListFolderPermissions returned an error: %v", tc.name, err)
+		}
+		if len(permits) != 1 {
+			t.Fatalf("%s: got %d permits, want 1", tc.name, len(permits))
+		}
+		id, isGroup := permits[0].SubjectID()
+		if id != tc.wantID || isGroup != tc.wantGroup {
+			t.Errorf("%s: SubjectID() = (%q, %v), want (%q, %v)", tc.name, id, isGroup, tc.wantID, tc.wantGroup)
+		}
+	}
+}

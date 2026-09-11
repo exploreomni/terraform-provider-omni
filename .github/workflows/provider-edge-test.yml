@@ -354,6 +354,76 @@ jobs:
 
           terraform destroy -auto-approve -var 'v=second' >/dev/null
 
+      # The permits response shape is undocumented beyond "each entry has a
+      # role", so this prints the real payload. Until it is confirmed, the
+      # provider resolves the subject from whichever key it finds.
+      - name: TC-P01..P05 folder permissions
+        run: |
+          set -o pipefail
+          mkdir -p "${RUNNER_TEMP}/perms" && cd "${RUNNER_TEMP}/perms"
+          cat > main.tf <<EOF
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "role" { type = string }
+
+          resource "omni_folder" "f" {
+            name = "tf-edge-perm-r${GITHUB_RUN_NUMBER}"
+            path = "tf-edge-perm-r${GITHUB_RUN_NUMBER}"
+          }
+          resource "omni_user_group" "g" {
+            display_name = "tf-edge-perm-group-r${GITHUB_RUN_NUMBER}"
+          }
+          resource "omni_folder_permission" "p" {
+            folder_id      = omni_folder.f.id
+            role           = var.role
+            user_group_ids = [omni_user_group.g.id]
+          }
+          output "folder_id" { value = omni_folder.f.id }
+          output "group_id"  { value = omni_user_group.g.id }
+          EOF
+          terraform init -input=false >/dev/null
+
+          terraform apply -auto-approve -var 'role=VIEWER' >/dev/null
+          FOLDER=$(terraform output -raw folder_id)
+          echo "PASS TC-P01: permission granted to group $(terraform output -raw group_id)"
+
+          echo "--- permits as the API reports them ---"
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/folders/${FOLDER}/permissions" | python3 -m json.tool
+
+          set +e
+          terraform plan -detailed-exitcode -out=/dev/null -var 'role=VIEWER'
+          code=$?
+          set -e
+          if [ $code -eq 0 ]; then
+            echo "PASS TC-P02: permission reads back with no drift"
+          else
+            echo "FAIL TC-P02: drift after grant (exit $code). Compare the permits payload above"
+            echo "with Permit.SubjectID in internal/client/permissions.go."
+            exit 1
+          fi
+
+          # Changing the role replaces the resource, since role is part of its identity.
+          terraform apply -auto-approve -var 'role=EDITOR' >/dev/null
+          echo "PASS TC-P03: role change applied"
+
+          curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
+            "$OMNI_BASE_URL/api/v1/folders/${FOLDER}/permissions" \
+          | python3 -c "
+          import sys, json, os
+          permits = json.load(sys.stdin).get('permits', [])
+          roles = [p.get('role') for p in permits]
+          print('  roles now:', roles)
+          if 'EDITOR' not in roles:
+              sys.exit('FAIL TC-P04: EDITOR not present after the role change')
+          print('PASS TC-P04: role change confirmed server side')
+          "
+
+          terraform destroy -auto-approve -var 'role=EDITOR' >/dev/null
+          echo "PASS TC-P05: permission revoked and folder destroyed"
+
       - name: TC-14b removing the only group member leaves the group in place
         run: |
           set -o pipefail
@@ -452,6 +522,120 @@ jobs:
 
           terraform destroy -auto-approve -var 'base_role=QUERIER' -var 'host=db.invalid.example' >/dev/null
           echo "PASS TC-28b: connection destroyed"
+
+      - name: TC-S01..S04 connection schema refresh schedule
+        if: inputs.test_connection
+        run: |
+          set -o pipefail
+          mkdir -p "${RUNNER_TEMP}/sched" && cd "${RUNNER_TEMP}/sched"
+          cat > main.tf <<EOF
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "cron" { type = string }
+
+          resource "omni_connection" "c" {
+            name      = "tf-edge-sched-conn-r${GITHUB_RUN_NUMBER}"
+            dialect   = "postgres"
+            host      = "db.invalid.example"
+            port      = 5432
+            database  = "postgres"
+            username  = "tf_edge_test"
+            password  = "not-a-real-password"
+            base_role = "NO_ACCESS"
+          }
+          resource "omni_connection_schedule" "s" {
+            connection_id = omni_connection.c.id
+            schedule      = var.cron
+            timezone      = "Australia/Melbourne"
+          }
+          output "description" { value = omni_connection_schedule.s.description }
+          EOF
+          terraform init -input=false >/dev/null
+
+          # Six-field EventBridge cron, not five-field Unix cron.
+          terraform apply -auto-approve -var 'cron=0 2 * * ? *' >/dev/null
+          echo "PASS TC-S01: schedule created, description: $(terraform output -raw description)"
+
+          set +e
+          terraform plan -detailed-exitcode -out=/dev/null -var 'cron=0 2 * * ? *'
+          code=$?
+          set -e
+          if [ $code -eq 0 ]; then
+            echo "PASS TC-S02: schedule reads back with no drift"
+          else
+            echo "FAIL TC-S02: drift after create (exit $code)"; exit 1
+          fi
+
+          terraform apply -auto-approve -var 'cron=30 4 * * ? *' >/dev/null
+          echo "PASS TC-S03: cron changed in place, description now: $(terraform output -raw description)"
+
+          terraform destroy -auto-approve -var 'cron=30 4 * * ? *' >/dev/null
+          echo "PASS TC-S04: schedule and connection destroyed"
+
+      - name: TC-E01..E03 connection environment
+        if: inputs.test_connection
+        run: |
+          set -o pipefail
+          mkdir -p "${RUNNER_TEMP}/env" && cd "${RUNNER_TEMP}/env"
+          cat > main.tf <<EOF
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "tenant" { type = string }
+
+          resource "omni_connection" "base" {
+            name      = "tf-edge-base-r${GITHUB_RUN_NUMBER}"
+            dialect   = "postgres"
+            host      = "db.invalid.example"
+            port      = 5432
+            database  = "postgres"
+            username  = "tf_edge_test"
+            password  = "not-a-real-password"
+            base_role = "NO_ACCESS"
+          }
+          resource "omni_connection" "tenant" {
+            name      = "tf-edge-tenant-r${GITHUB_RUN_NUMBER}"
+            dialect   = "postgres"
+            host      = "db.invalid.example"
+            port      = 5432
+            database  = "postgres"
+            username  = "tf_edge_test"
+            password  = "not-a-real-password"
+            base_role = "NO_ACCESS"
+          }
+          resource "omni_connection_environment" "e" {
+            base_connection_id        = omni_connection.base.id
+            environment_connection_id = omni_connection.tenant.id
+            user_attribute_values     = [var.tenant]
+          }
+          output "env_id" { value = omni_connection_environment.e.id }
+          EOF
+          terraform init -input=false >/dev/null
+
+          terraform apply -auto-approve -var 'tenant=acme' >/dev/null
+          echo "PASS TC-E01: connection environment created, id $(terraform output -raw env_id)"
+
+          terraform apply -auto-approve -var 'tenant=globex' >/dev/null
+          echo "PASS TC-E02: attribute values updated in place"
+
+          # No read endpoint exists, so a plan can only ever be clean here.
+          # This asserts the documented behaviour rather than real drift detection.
+          set +e
+          terraform plan -detailed-exitcode -out=/dev/null -var 'tenant=globex'
+          code=$?
+          set -e
+          if [ $code -eq 0 ]; then
+            echo "NOTE TC-E03: plan is clean, but only because the API has no read endpoint."
+            echo "This resource cannot detect drift. Documented, not a guarantee."
+          else
+            echo "FAIL TC-E03: unexpected plan result (exit $code)"; exit 1
+          fi
+
+          terraform destroy -auto-approve -var 'tenant=globex' >/dev/null
+          echo "PASS TC-E04: connection environment and both connections destroyed"
 
       - name: Clean up anything left behind
         if: always()

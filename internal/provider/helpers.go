@@ -135,6 +135,22 @@ func mapToAny(ctx context.Context, m types.Map) (map[string]any, diag.Diagnostic
 	return out, diags
 }
 
+// applySubjectsToState writes a refreshed subject list back into a set,
+// leaving a set the config never declared as null rather than empty.
+func applySubjectsToState(ctx context.Context, target *types.Set, values []string) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if target.IsNull() {
+		return diags
+	}
+	value, d := types.SetValueFrom(ctx, types.StringType, values)
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	*target = value
+	return diags
+}
+
 // setToStrings converts a framework set of strings into a []string.
 func setToStrings(ctx context.Context, s types.Set) ([]string, diag.Diagnostics) {
 	var diags diag.Diagnostics
