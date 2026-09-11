@@ -412,13 +412,16 @@ jobs:
           curl -sf -H "Authorization: Bearer $OMNI_API_TOKEN" \
             "$OMNI_BASE_URL/api/v1/folders/${FOLDER}/permissions" \
           | python3 -c "
-          import sys, json, os
+          import sys, json
           permits = json.load(sys.stdin).get('permits', [])
-          roles = [p.get('role') for p in permits]
-          print('  roles now:', roles)
-          if 'EDITOR' not in roles:
+          # The role is nested under 'direct', not at the top level.
+          roles = [(p.get('name'), (p.get('direct') or {}).get('role')) for p in permits]
+          print('  permits now:', roles)
+          if not any(role == 'EDITOR' for _, role in roles):
               sys.exit('FAIL TC-P04: EDITOR not present after the role change')
-          print('PASS TC-P04: role change confirmed server side')
+          if any(role == 'VIEWER' for _, role in roles):
+              sys.exit('FAIL TC-P04: the old VIEWER grant survived the role change')
+          print('PASS TC-P04: role change confirmed server side, old grant gone')
           "
 
           terraform destroy -auto-approve -var 'role=EDITOR' >/dev/null
