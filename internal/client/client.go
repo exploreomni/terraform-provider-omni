@@ -111,6 +111,15 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("omni api: %s %s returned %d: %s", e.Method, e.Path, e.StatusCode, msg)
 }
 
+// IsRateLimited reports whether err is a 429. Callers that retry on their own
+// should treat it as transient: Do already backs off, so a 429 reaching the
+// caller means that backoff was exhausted rather than that the request was
+// wrong.
+func IsRateLimited(err error) bool {
+	apiErr, ok := err.(*APIError)
+	return ok && apiErr.StatusCode == http.StatusTooManyRequests
+}
+
 // IsNotFound reports whether err is a 404 from the Omni API. Resources use this
 // to drop themselves from state instead of erroring.
 func IsNotFound(err error) bool {

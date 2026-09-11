@@ -136,11 +136,13 @@ func (c *Client) CreateConnectionSchedule(ctx context.Context, connectionID stri
 			return &out, nil
 		}
 		lastErr = err
-		if !IsNotFound(err) {
+		// 404 is the propagation delay. 429 means the inner backoff in Do ran
+		// out of attempts, which the outer loop can absorb by waiting longer.
+		if !IsNotFound(err) && !IsRateLimited(err) {
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("connection %s was still not visible to the schedules endpoint after %d attempts: %w", connectionID, attempts, lastErr)
+	return nil, fmt.Errorf("creating a schedule on connection %s failed after %d attempts: %w", connectionID, attempts, lastErr)
 }
 
 // GetConnectionSchedule fetches one schedule.
