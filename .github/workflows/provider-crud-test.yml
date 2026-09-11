@@ -159,7 +159,7 @@ jobs:
       - name: TC-00 init and validate
         run: |
           $TF init -input=false
-          terraform validate
+          $TF validate
 
       - name: TC-01..08 create
         run: $TF apply -auto-approve

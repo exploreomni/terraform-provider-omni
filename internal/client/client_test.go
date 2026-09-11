@@ -211,41 +211,62 @@ func TestListModelRolesParsesResultsShape(t *testing.T) {
 	}
 }
 
-func TestPermitSubjectResolution(t *testing.T) {
-	// The spec documents only that a permit carries a role, so the subject is
-	// resolved from whichever key the API uses. These are the plausible shapes.
-	cases := []struct {
-		name      string
-		body      string
-		wantID    string
-		wantGroup bool
-	}{
-		{"flat user id", `{"permits":[{"role":"VIEWER","userId":"u1"}]}`, "u1", false},
-		{"membership id", `{"permits":[{"role":"VIEWER","membershipId":"m1"}]}`, "m1", false},
-		{"flat group id", `{"permits":[{"role":"EDITOR","userGroupId":"g1"}]}`, "g1", true},
-		{"nested group", `{"permits":[{"role":"EDITOR","userGroup":{"id":"g2"}}]}`, "g2", true},
-		{"nested user", `{"permits":[{"role":"VIEWER","user":{"id":"u2"}}]}`, "u2", false},
+func TestPermitDecodesTheRealShape(t *testing.T) {
+	// Captured verbatim from a live instance. The role is nested under
+	// "direct", the subject is a flat id with a type discriminator, and a
+	// group's id here is its full UUID rather than the SCIM miniUuid.
+	body := `{
+	  "permits": [
+	    {"direct":{"accessBoost":false,"role":"OWNER","isOwner":true},
+	     "description":"someone@example.invalid","id":"faeb3931-f106-4e37-bb24-8748bf43bfa5",
+	     "isEmbed":false,"name":"A Person","type":"user"},
+	    {"direct":{"accessBoost":false,"role":"VIEWER","isOwner":false},
+	     "description":"0 members","id":"0aea1b4c-ebfd-4f6a-bdf6-d7edfd798b34",
+	     "name":"tf-edge-perm-group","type":"userGroup"}
+	  ]
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	permits, err := testClient(t, server.URL).ListFolderPermissions(context.Background(), "f1")
+	if err != nil {
+		t.Fatalf("ListFolderPermissions returned an error: %v", err)
+	}
+	if len(permits) != 2 {
+		t.Fatalf("got %d permits, want 2", len(permits))
 	}
 
-	for _, tc := range cases {
-		body := tc.body
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(body))
-		}))
+	owner := permits[0]
+	if owner.Role() != "OWNER" || owner.IsGroup() || owner.ID != "faeb3931-f106-4e37-bb24-8748bf43bfa5" {
+		t.Errorf("user permit = %+v, want an OWNER user permit", owner)
+	}
+	if !owner.Direct.IsOwner {
+		t.Error("expected isOwner true on the owner permit")
+	}
 
-		c := testClient(t, server.URL)
-		permits, err := c.ListFolderPermissions(context.Background(), "f1")
-		server.Close()
+	group := permits[1]
+	if group.Role() != "VIEWER" || !group.IsGroup() || group.Name != "tf-edge-perm-group" {
+		t.Errorf("group permit = %+v, want a VIEWER group permit", group)
+	}
+}
 
-		if err != nil {
-			t.Fatalf("%s: ListFolderPermissions returned an error: %v", tc.name, err)
-		}
-		if len(permits) != 1 {
-			t.Fatalf("%s: got %d permits, want 1", tc.name, len(permits))
-		}
-		id, isGroup := permits[0].SubjectID()
-		if id != tc.wantID || isGroup != tc.wantGroup {
-			t.Errorf("%s: SubjectID() = (%q, %v), want (%q, %v)", tc.name, id, isGroup, tc.wantID, tc.wantGroup)
-		}
+func TestPermitWithoutDirectGrantHasNoRole(t *testing.T) {
+	// A permit with no direct block means inherited access, which Terraform
+	// must not treat as a grant it made.
+	body := `{"permits":[{"id":"x","name":"y","type":"userGroup"}]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+
+	permits, err := testClient(t, server.URL).ListFolderPermissions(context.Background(), "f1")
+	if err != nil {
+		t.Fatalf("ListFolderPermissions returned an error: %v", err)
+	}
+	if permits[0].Role() != "" {
+		t.Errorf("Role() = %q, want empty for a permit with no direct grant", permits[0].Role())
 	}
 }

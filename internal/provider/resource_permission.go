@@ -70,7 +70,10 @@ func permissionAttributes(targetAttr, targetDescription string) map[string]schem
 			Optional:    true,
 			ElementType: types.StringType,
 			MarkdownDescription: "User group IDs granted this role. Authoritative for this resource. For embed, " +
-				"this is usually what you want: the `groups` claim in a signed URL resolves to these groups.",
+				"this is usually what you want: the `groups` claim in a signed URL resolves to these groups.\n\n" +
+				"Use the ID from `omni_user_group`, which is the SCIM miniUuid. Reading permissions back " +
+				"requires an extra lookup per group, because the permissions endpoint reports a group's full " +
+				"UUID instead and the two cannot be compared directly.",
 		},
 		"access_boost": schema.BoolAttribute{
 			Optional: true,
@@ -113,28 +116,56 @@ func diffSubjects(before, after []string) (added, removed []string) {
 }
 
 // refreshFromPermits narrows the tracked subjects to those the API still
-// reports holding this role. Subjects it no longer lists have lost the grant.
-func refreshFromPermits(permits []client.Permit, role string, trackedUsers, trackedGroups []string) (users, groups []string) {
-	held := map[string]bool{}
+// reports holding this role.
+//
+// Users match on ID. Groups have to match on name: the permits list reports a
+// group's full UUID, while the SCIM API that created the group returns its
+// miniUuid, and the two are different identifiers for the same group.
+func refreshFromPermits(permits []client.Permit, role string, trackedUsers []string, groupNames map[string]string) (users, groups []string) {
+	heldUserIDs := map[string]bool{}
+	heldGroupNames := map[string]bool{}
+
 	for _, p := range permits {
-		if !strings.EqualFold(p.Role, role) {
+		if !strings.EqualFold(p.Role(), role) {
 			continue
 		}
-		if id, _ := p.SubjectID(); id != "" {
-			held[id] = true
+		if p.IsGroup() {
+			heldGroupNames[p.Name] = true
+		} else {
+			heldUserIDs[p.ID] = true
 		}
 	}
+
 	for _, id := range trackedUsers {
-		if held[id] {
+		if heldUserIDs[id] {
 			users = append(users, id)
 		}
 	}
-	for _, id := range trackedGroups {
-		if held[id] {
+	for id, name := range groupNames {
+		if name != "" && heldGroupNames[name] {
 			groups = append(groups, id)
 		}
 	}
 	return users, groups
+}
+
+// resolveGroupNames maps each tracked group ID to its display name, which is
+// how a permit identifies a group.
+func resolveGroupNames(ctx context.Context, c *client.Client, ids []string) (map[string]string, error) {
+	names := make(map[string]string, len(ids))
+	for _, id := range ids {
+		group, err := c.GetGroup(ctx, id)
+		if err != nil {
+			if client.IsNotFound(err) {
+				// The group is gone, so it holds no permission either.
+				names[id] = ""
+				continue
+			}
+			return nil, fmt.Errorf("resolving group %s: %w", id, err)
+		}
+		names[id] = group.DisplayName
+	}
+	return names, nil
 }
 
 func permissionID(targetID, role string) string { return targetID + ":" + role }
@@ -239,7 +270,13 @@ func (r *folderPermissionResource) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 
-	users, groups := refreshFromPermits(permits, state.Role.ValueString(), trackedUsers, trackedGroups)
+	groupNames, err := resolveGroupNames(ctx, r.client, trackedGroups)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to resolve user group names", err.Error())
+		return
+	}
+
+	users, groups := refreshFromPermits(permits, state.Role.ValueString(), trackedUsers, groupNames)
 	if len(users) == 0 && len(groups) == 0 {
 		resp.State.RemoveResource(ctx)
 		return
@@ -435,7 +472,13 @@ func (r *documentPermissionResource) Read(ctx context.Context, req resource.Read
 		return
 	}
 
-	users, groups := refreshFromPermits(permits, state.Role.ValueString(), trackedUsers, trackedGroups)
+	groupNames, err := resolveGroupNames(ctx, r.client, trackedGroups)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to resolve user group names", err.Error())
+		return
+	}
+
+	users, groups := refreshFromPermits(permits, state.Role.ValueString(), trackedUsers, groupNames)
 	if len(users) == 0 && len(groups) == 0 {
 		resp.State.RemoveResource(ctx)
 		return

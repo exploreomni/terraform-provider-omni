@@ -2,8 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 )
@@ -37,47 +35,41 @@ type PermissionRevoke struct {
 
 // Permit is one entry in a content permission list.
 //
-// The spec documents only that each permit carries a role, so the remaining
-// fields are decoded loosely and the subject is resolved from whichever key the
-// API actually uses. Raw keeps the original object so a shape change shows up
-// as a diagnosable value rather than a silent mismatch.
+// The real shape, confirmed against a live instance, is not what the spec
+// implies. The role is nested under "direct", the subject is a flat "id" with a
+// "type" discriminator, and for groups that id is the group's full UUID rather
+// than the miniUuid the SCIM API returns. Matching therefore goes by name for
+// groups and by id for users.
 type Permit struct {
-	Role        string         `json:"role"`
-	AccessBoost bool           `json:"accessBoost"`
-	Raw         map[string]any `json:"-"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Type        string      `json:"type"`
+	Description string      `json:"description"`
+	IsEmbed     bool        `json:"isEmbed"`
+	Direct      *PermitRole `json:"direct"`
 }
 
-// SubjectID returns the user or group this permit applies to, and whether it is
-// a group. It checks the key names an API of this shape is likely to use.
-func (p Permit) SubjectID() (id string, isGroup bool) {
-	for _, key := range []string{"userGroupId", "groupId", "userGroupID"} {
-		if v, ok := p.Raw[key].(string); ok && v != "" {
-			return v, true
-		}
-	}
-	for _, key := range []string{"userId", "membershipId", "userID", "id"} {
-		if v, ok := p.Raw[key].(string); ok && v != "" {
-			return v, false
-		}
-	}
-	// Nested subject objects, e.g. {"userGroup": {"id": "..."}}.
-	for _, key := range []string{"userGroup", "group"} {
-		if obj, ok := p.Raw[key].(map[string]any); ok {
-			if v, ok := obj["id"].(string); ok && v != "" {
-				return v, true
-			}
-		}
-	}
-	if obj, ok := p.Raw["user"].(map[string]any); ok {
-		if v, ok := obj["id"].(string); ok && v != "" {
-			return v, false
-		}
-	}
-	return "", false
+// PermitRole is the role block nested inside a permit.
+type PermitRole struct {
+	Role        string `json:"role"`
+	AccessBoost bool   `json:"accessBoost"`
+	IsOwner     bool   `json:"isOwner"`
 }
+
+// Role returns the granted role, or an empty string when the permit carries no
+// direct grant (inherited access, for instance).
+func (p Permit) Role() string {
+	if p.Direct == nil {
+		return ""
+	}
+	return p.Direct.Role
+}
+
+// IsGroup reports whether this permit applies to a user group.
+func (p Permit) IsGroup() bool { return p.Type == "userGroup" }
 
 type permitsResponse struct {
-	Permits []json.RawMessage `json:"permits"`
+	Permits []Permit `json:"permits"`
 }
 
 // FolderOrgAccess is the organization-wide access setting on a folder.
@@ -175,24 +167,11 @@ func (c *Client) SetDocumentSettings(ctx context.Context, identifier string, in 
 	return c.Put(ctx, documentPermissionsPath(identifier), in, nil)
 }
 
-// listPermits decodes a permits array, keeping each raw object so the subject
-// can be resolved whatever key the API uses for it.
+// listPermits decodes a permits array.
 func (c *Client) listPermits(ctx context.Context, path string) ([]Permit, error) {
 	var wrapper permitsResponse
 	if err := c.Get(ctx, path, nil, &wrapper); err != nil {
 		return nil, err
 	}
-
-	permits := make([]Permit, 0, len(wrapper.Permits))
-	for _, raw := range wrapper.Permits {
-		var p Permit
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, fmt.Errorf("decoding permit from %s: %w", path, err)
-		}
-		if err := json.Unmarshal(raw, &p.Raw); err != nil {
-			return nil, fmt.Errorf("decoding permit object from %s: %w", path, err)
-		}
-		permits = append(permits, p)
-	}
-	return permits, nil
+	return wrapper.Permits, nil
 }
