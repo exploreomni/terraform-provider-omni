@@ -157,19 +157,66 @@ type Model struct {
 	DeletedAt    string `json:"deletedAt"`
 }
 
-// AccessGrant is an access grant declared when creating a model.
-type AccessGrant struct {
-	Name            string `json:"name"`
-	AccessBoostable *bool  `json:"accessBoostable,omitempty"`
+// ModelInput is the create body for POST /v1/models.
+//
+// accessGrants is intentionally absent: access grants are model content,
+// declared in model YAML and versioned through git sync.
+type ModelInput struct {
+	ConnectionID         string `json:"connectionId,omitempty"`
+	BaseModelID          string `json:"baseModelId,omitempty"`
+	ModelKind            string `json:"modelKind"`
+	ModelName            string `json:"modelName"`
+	AllowAsWorkbookBase  *bool  `json:"allowAsWorkbookBase,omitempty"`
+	UsesIsolatedBranches *bool  `json:"usesIsolatedBranches,omitempty"`
 }
 
-// ModelInput is the create body for POST /v1/models.
-type ModelInput struct {
-	ConnectionID string        `json:"connectionId,omitempty"`
-	BaseModelID  string        `json:"baseModelId,omitempty"`
-	ModelKind    string        `json:"modelKind"`
-	ModelName    string        `json:"modelName"`
-	AccessGrants []AccessGrant `json:"accessGrants,omitempty"`
+// UserAttribute is a user attribute definition.
+//
+// The API exposes these read-only. Definitions are created in the UI under
+// Settings > User attributes, which means the schema that row-level security
+// keys off cannot be managed as code.
+type UserAttribute struct {
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Label          string  `json:"label"`
+	Description    *string `json:"description"`
+	Type           string  `json:"type"`
+	DefaultValue   *string `json:"default_value"`
+	MultipleValues bool    `json:"multiple_values"`
+	System         bool    `json:"system"`
+}
+
+type listUserAttributesResponse struct {
+	Records []UserAttribute `json:"records"`
+}
+
+// ListUserAttributes returns every user attribute definition, including the
+// built-in ones Omni populates itself.
+func (c *Client) ListUserAttributes(ctx context.Context) ([]UserAttribute, error) {
+	var out listUserAttributesResponse
+	if err := c.Get(ctx, "/v1/user-attributes", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Records, nil
+}
+
+// FindUserAttribute looks up a definition by its reference name.
+func (c *Client) FindUserAttribute(ctx context.Context, name string) (*UserAttribute, error) {
+	attrs, err := c.ListUserAttributes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range attrs {
+		if attrs[i].Name == name {
+			return &attrs[i], nil
+		}
+	}
+	return nil, &APIError{
+		StatusCode: http.StatusNotFound,
+		Method:     http.MethodGet,
+		Path:       "/v1/user-attributes",
+		Message:    fmt.Sprintf("no user attribute named %q. Definitions are created in the UI under Settings > User attributes; the API has no create endpoint", name),
+	}
 }
 
 type modelResponse struct {

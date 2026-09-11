@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -29,13 +30,15 @@ type modelResource struct {
 }
 
 type modelResourceModel struct {
-	ID           types.String `tfsdk:"id"`
-	Name         types.String `tfsdk:"name"`
-	ModelKind    types.String `tfsdk:"model_kind"`
-	ConnectionID types.String `tfsdk:"connection_id"`
-	BaseModelID  types.String `tfsdk:"base_model_id"`
-	CreatedAt    types.String `tfsdk:"created_at"`
-	UpdatedAt    types.String `tfsdk:"updated_at"`
+	ID                   types.String `tfsdk:"id"`
+	Name                 types.String `tfsdk:"name"`
+	ModelKind            types.String `tfsdk:"model_kind"`
+	ConnectionID         types.String `tfsdk:"connection_id"`
+	BaseModelID          types.String `tfsdk:"base_model_id"`
+	AllowAsWorkbookBase  types.Bool   `tfsdk:"allow_as_workbook_base"`
+	UsesIsolatedBranches types.Bool   `tfsdk:"uses_isolated_branches"`
+	CreatedAt            types.String `tfsdk:"created_at"`
+	UpdatedAt            types.String `tfsdk:"updated_at"`
 }
 
 func (r *modelResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -45,7 +48,10 @@ func (r *modelResource) Metadata(_ context.Context, req resource.MetadataRequest
 func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a shared or shared extension model. Destroying the resource archives the " +
-			"model, which is recoverable from the trash.",
+			"model, which is recoverable from the trash.\n\n" +
+			"Access grants are deliberately not managed here. They are model content, declared in model YAML " +
+			"and versioned through git sync. Setting them from Terraform as well would mean two systems " +
+			"writing one source of truth.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -84,6 +90,17 @@ func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"allow_as_workbook_base": schema.BoolAttribute{
+				Optional:            true,
+				MarkdownDescription: "Whether workbooks may be built on this model. Set at creation only.",
+				PlanModifiers:       []planmodifier.Bool{boolplanmodifier.RequiresReplace()},
+			},
+			"uses_isolated_branches": schema.BoolAttribute{
+				Optional: true,
+				MarkdownDescription: "For `SHARED_EXTENSION` models, show branches on the extension model page " +
+					"rather than the parent shared model. Set at creation only.",
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplace()},
+			},
 			"created_at": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "When the model was created.",
@@ -117,10 +134,12 @@ func (r *modelResource) Create(ctx context.Context, req resource.CreateRequest, 
 	}
 
 	created, err := r.client.CreateModel(ctx, client.ModelInput{
-		ConnectionID: plan.ConnectionID.ValueString(),
-		BaseModelID:  plan.BaseModelID.ValueString(),
-		ModelKind:    plan.ModelKind.ValueString(),
-		ModelName:    plan.Name.ValueString(),
+		ConnectionID:         plan.ConnectionID.ValueString(),
+		BaseModelID:          plan.BaseModelID.ValueString(),
+		ModelKind:            plan.ModelKind.ValueString(),
+		ModelName:            plan.Name.ValueString(),
+		AllowAsWorkbookBase:  boolPtr(plan.AllowAsWorkbookBase),
+		UsesIsolatedBranches: boolPtr(plan.UsesIsolatedBranches),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to create Omni model", err.Error())
@@ -153,6 +172,8 @@ func (r *modelResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
+	// allow_as_workbook_base and uses_isolated_branches are never returned by
+	// the API, so state keeps whatever was configured.
 	applyModelToState(&state, model)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

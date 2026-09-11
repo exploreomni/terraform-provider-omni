@@ -637,6 +637,45 @@ jobs:
           terraform destroy -auto-approve -var 'tenant=globex' >/dev/null
           echo "PASS TC-E04: connection environment and both connections destroyed"
 
+      - name: TC-A01 user attribute data sources
+        run: |
+          set -o pipefail
+          mkdir -p "${RUNNER_TEMP}/attrs-ds" && cd "${RUNNER_TEMP}/attrs-ds"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+
+          data "omni_user_attributes" "all" {}
+          data "omni_user_attributes" "with_system" {
+            include_system = true
+          }
+
+          output "custom"     { value = data.omni_user_attributes.all.names }
+          output "everything" { value = data.omni_user_attributes.with_system.names }
+          EOF
+          terraform init -input=false >/dev/null
+          terraform apply -auto-approve >/dev/null
+
+          echo "  non-system attributes: $(terraform output -json custom)"
+          echo "  including system:      $(terraform output -json everything)"
+
+          python3 - <<'PY' || exit 1
+          import json, subprocess
+          custom = json.loads(subprocess.run(
+              ["terraform", "output", "-json", "custom"], capture_output=True, text=True).stdout)
+          everything = json.loads(subprocess.run(
+              ["terraform", "output", "-json", "everything"], capture_output=True, text=True).stdout)
+          if len(everything) <= len(custom):
+              raise SystemExit("FAIL TC-A01: include_system did not return more attributes")
+          if any(n.startswith("omni_") for n in custom):
+              raise SystemExit("FAIL TC-A01: a system attribute leaked into the filtered list")
+          print("PASS TC-A01: attribute list reads, system attributes filtered by default")
+          PY
+
+          terraform destroy -auto-approve >/dev/null
+
       - name: Clean up anything left behind
         if: always()
         run: |
