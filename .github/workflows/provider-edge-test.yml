@@ -739,6 +739,60 @@ jobs:
           terraform destroy -auto-approve -var "label_name=${LABEL_NAME}-renamed" -var 'colour=#d73a49' >/dev/null
           echo "PASS TC-L05: label deleted"
 
+      - name: TC-C01..C04 colour palettes
+        run: |
+          set -o pipefail
+          mkdir -p "${RUNNER_TEMP}/palette" && cd "${RUNNER_TEMP}/palette"
+          cat > main.tf <<'EOF'
+          terraform {
+            required_providers { omni = { source = "ashima-omni/omni" } }
+          }
+          provider "omni" {}
+          variable "palette_name" { type = string }
+          variable "colors"       { type = list(string) }
+
+          resource "omni_color_palette" "p" {
+            name   = var.palette_name
+            type   = "discrete"
+            colors = var.colors
+          }
+          output "id"     { value = omni_color_palette.p.id }
+          output "colors" { value = omni_color_palette.p.colors }
+          EOF
+          terraform init -input=false >/dev/null
+
+          NAME="tf-edge-palette-r${GITHUB_RUN_NUMBER}"
+          terraform apply -auto-approve -var "palette_name=${NAME}" \
+            -var 'colors=["#1f77b4","#ff7f0e","#2ca02c"]' >/dev/null
+          echo "PASS TC-C01: palette created, id $(terraform output -raw id)"
+
+          set +e
+          terraform plan -detailed-exitcode -out=/dev/null -var "palette_name=${NAME}" \
+            -var 'colors=["#1f77b4","#ff7f0e","#2ca02c"]'
+          code=$?
+          set -e
+          if [ $code -eq 0 ]; then
+            echo "PASS TC-C02: palette reads back with no drift"
+          else
+            echo "FAIL TC-C02: drift after create (exit $code)"; exit 1
+          fi
+
+          # Colour order is meaningful, so reordering must be a real change.
+          terraform apply -auto-approve -var "palette_name=${NAME}" \
+            -var 'colors=["#ff7f0e","#1f77b4","#2ca02c","#d62728"]' >/dev/null
+          terraform output -json colors | python3 -c "
+          import sys, json
+          colors = json.load(sys.stdin)
+          print('  colours now:', colors)
+          if colors[0] != '#ff7f0e' or len(colors) != 4:
+              sys.exit('FAIL TC-C03: colour order or length did not update')
+          print('PASS TC-C03: colours reordered and extended in place')
+          "
+
+          terraform destroy -auto-approve -var "palette_name=${NAME}" \
+            -var 'colors=["#ff7f0e","#1f77b4","#2ca02c","#d62728"]' >/dev/null
+          echo "PASS TC-C04: palette deleted"
+
       - name: Clean up anything left behind
         if: always()
         run: |

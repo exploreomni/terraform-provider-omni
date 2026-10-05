@@ -151,6 +151,19 @@ func applySubjectsToState(ctx context.Context, target *types.Set, values []strin
 	return diags
 }
 
+// listToStrings converts a framework list of strings into a []string, keeping
+// order, which matters for an ordered colour palette.
+func listToStrings(ctx context.Context, l types.List) ([]string, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if l.IsNull() || l.IsUnknown() {
+		return nil, diags
+	}
+
+	var out []string
+	diags.Append(l.ElementsAs(ctx, &out, false)...)
+	return out, diags
+}
+
 // setToStrings converts a framework set of strings into a []string.
 func setToStrings(ctx context.Context, s types.Set) ([]string, diag.Diagnostics) {
 	var diags diag.Diagnostics

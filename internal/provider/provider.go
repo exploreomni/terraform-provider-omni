@@ -149,6 +149,7 @@ func (p *omniProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewConnectionEnvironmentResource,
 		NewConnectionScheduleResource,
 		NewLabelResource,
+		NewColorPaletteResource,
 	}
 }
 

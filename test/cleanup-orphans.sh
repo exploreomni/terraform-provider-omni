@@ -83,6 +83,22 @@ for u in json.load(sys.stdin).get('Resources', []):
   fi
 done
 
+echo "== colour palettes matching tf-edge =="
+api "$OMNI_BASE_URL/api/v1/color-palettes" \
+| python3 -c "
+import sys, json
+for p in json.load(sys.stdin).get('color_palettes', []):
+    if p.get('name', '').startswith('tf-edge'):
+        print(p['id'], p['name'])
+" | while read -r id name; do
+  if $DELETE; then
+    api -X DELETE "$OMNI_BASE_URL/api/v1/color-palettes/$id" -w " -> %{http_code}\n" -o /dev/null
+    echo "  deleted palette $name"
+  else
+    echo "  would delete palette $id $name"
+  fi
+done
+
 echo "== labels matching tf-edge =="
 api "$OMNI_BASE_URL/api/v1/labels" \
 | python3 -c "
