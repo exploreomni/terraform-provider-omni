@@ -13,8 +13,10 @@ vendor/
 *.tfstate
 *.tfstate.*
 crash.log
+# Variable files are committed: they hold configuration, not secrets. Secrets
+# come from TF_VAR_ environment variables fed by a secret store.
 *.tfvars
-!infra/terraform.tfvars
+!infra/*.auto.tfvars
 !infra/examples/*.tfvars
 
 # Editors and OS

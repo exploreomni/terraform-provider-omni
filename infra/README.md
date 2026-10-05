@@ -4,22 +4,43 @@ The configuration applied to one instance. One workspace, one instance.
 
 ```
 infra/
-  main.tf                 provider, backend, module calls
-  variables.tf            every input, all defaulting to empty
+  main.tf                   provider, backend, module calls
+  variables.tf              every input, all defaulting to empty
   outputs.tf
+
+  warehouse.auto.tfvars     connections
+  models.auto.tfvars        models and their git connections
+  tenants.auto.tfvars       embed tenants
+  branding.auto.tfvars      palettes and labels
+  access.auto.tfvars        internal users, groups, folders
+
   examples/
-    internal.tfvars       an internal deployment
-    embed.tfvars          an embed deployment
-    both.tfvars           internal team building content tenants consume
+    internal.tfvars         an internal deployment
+    embed.tfvars            an embed deployment
+    both.tfvars             internal team building content tenants consume
+    auth-methods.tfvars     one connection per authentication method
 ```
+
+## Why one file per concern
+
+Terraform loads every `*.auto.tfvars` automatically and merges them, so this is
+organisational rather than functional. It earns its place at review time: a
+pull request touching `tenants.auto.tfvars` is an onboarding, one touching
+`warehouse.auto.tfvars` is a credential or warehouse change, and those often
+want different reviewers.
+
+Two things to know. A variable set in two files silently takes the value from
+whichever loads later alphabetically, so keep each variable in one file. And
+only the `.auto.tfvars` suffix auto-loads: a file named `models.tfvars` would
+need `-var-file` on every command, including in CI.
 
 ## Getting started
 
-```bash
-cp examples/internal.tfvars terraform.tfvars   # or embed, or both
-```
+The files as committed describe an embed deployment. For an internal one, move
+the contents of `examples/internal.tfvars` into the matching files and empty
+`tenants.auto.tfvars`.
 
-Edit it, then:
+Then:
 
 ```bash
 export OMNI_BASE_URL=https://yourinstance.omniapp.co
