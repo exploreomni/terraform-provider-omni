@@ -83,5 +83,21 @@ for u in json.load(sys.stdin).get('Resources', []):
   fi
 done
 
+echo "== labels matching tf-edge =="
+api "$OMNI_BASE_URL/api/v1/labels" \
+| python3 -c "
+import sys, json
+for l in json.load(sys.stdin).get('labels', []):
+    if l.get('name', '').startswith('tf-edge'):
+        print(l['name'])
+" | while read -r name; do
+  if $DELETE; then
+    api -X DELETE "$OMNI_BASE_URL/api/v1/labels/$name" -w " -> %{http_code}\n" -o /dev/null
+    echo "  deleted label $name"
+  else
+    echo "  would delete label $name"
+  fi
+done
+
 $DELETE || echo "
 Nothing was removed. Re-run with --delete to apply."
