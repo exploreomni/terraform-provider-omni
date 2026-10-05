@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "infra/**"
+      - "modules/**"
       - "internal/**"
       - "main.go"
       - ".github/workflows/terraform-*.yml"
@@ -69,6 +70,8 @@ jobs:
       - name: Init
         env:
           TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+          OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
         run: terraform init -input=false
 
       - name: Format check
@@ -78,6 +81,7 @@ jobs:
         env:
           OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
           OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+          TF_VAR_connection_passwords: ${{ secrets.CONNECTION_PASSWORDS }}
         run: terraform validate || true
 
       - name: Plan
@@ -85,6 +89,7 @@ jobs:
         env:
           OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
           OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+          TF_VAR_connection_passwords: ${{ secrets.CONNECTION_PASSWORDS }}
         run: |
           set -o pipefail
           terraform plan -no-color -input=false -lock-timeout=5m 2>&1 | tee plan.txt

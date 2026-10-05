@@ -10,12 +10,12 @@ vendor/
 
 # Terraform
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 crash.log
 *.tfvars
-!examples/**/*.tfvars.example
+!infra/terraform.tfvars
+!infra/examples/*.tfvars
 
 # Editors and OS
 .idea/
@@ -25,3 +25,6 @@ crash.log
 # Local dev overrides
 .terraformrc
 terraform.rc
+
+# The lock file is committed on purpose: CI installs the provider from a
+# filesystem mirror and needs the recorded checksums.
