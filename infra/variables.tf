@@ -9,7 +9,21 @@ variable "connections" {
 }
 
 variable "connection_passwords" {
-  description = "Password per connection, keyed the same as connections."
+  description = "Password per connection. For BigQuery service accounts this is the full service account JSON."
+  type        = map(string)
+  sensitive   = true
+  default     = {}
+}
+
+variable "connection_private_keys" {
+  description = "RSA private key per connection, for Snowflake key pair authentication."
+  type        = map(string)
+  sensitive   = true
+  default     = {}
+}
+
+variable "connection_oauth_secrets" {
+  description = "OAuth client secret per connection."
   type        = map(string)
   sensitive   = true
   default     = {}
@@ -108,7 +122,12 @@ variable "tenants" {
 
   type = map(object({
     base_connection = string
-    connection      = string
+
+    # A connection of this tenant's own, for physical isolation. Omit it and
+    # the tenant shares the base connection, with rows isolated by access
+    # filters keyed off the user attribute. That is the common case.
+    connection = optional(string)
+
     model           = optional(string)
     colors          = optional(list(string))
     content_role    = optional(string, "VIEWER")

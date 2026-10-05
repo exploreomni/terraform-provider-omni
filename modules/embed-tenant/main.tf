@@ -12,11 +12,17 @@ terraform {
   }
 }
 
-# Routes a session carrying the tenant key to that connection.
+# Routes a session carrying the tenant key to its own connection.
+#
+# Only created when the tenant has a connection of its own. Most deployments
+# share one connection across tenants and isolate rows with access filters
+# keyed off the user attribute, in which case this is skipped entirely.
 #
 # This resource cannot detect drift: the API has no read endpoint for
 # connection environments.
 resource "omni_connection_environment" "tenant" {
+  count = var.tenant_connection_id == null ? 0 : 1
+
   base_connection_id        = var.base_connection_id
   environment_connection_id = var.tenant_connection_id
   user_attribute_values     = [var.tenant_key]

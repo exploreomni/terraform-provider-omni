@@ -90,9 +90,21 @@ resource "omni_connection" "tenant" {
 Set the environment user attribute name on the base connection in the UI. The
 provider does not expose that field yet.
 
-### Step 2: connection environments
+### Step 2: connection environments, only if tenants need separate databases
 
-Route each tenant's attribute value to its connection.
+There are two isolation models, and most deployments use the first.
+
+**Shared connection with access filters.** Every tenant queries one connection,
+and rows are filtered by an access filter in model YAML keyed off the user
+attribute. Nothing in this step applies: omit `connection` from the tenant and
+no connection environment is created.
+
+**A connection per tenant.** Tenants sit in different databases or schemas and
+a connection environment routes each session to the right one. Heavier to run,
+and the right choice when tenant data must be physically separate.
+
+If you are using the second, route each tenant's attribute value to its
+connection.
 
 ```hcl
 resource "omni_connection_environment" "tenant" {

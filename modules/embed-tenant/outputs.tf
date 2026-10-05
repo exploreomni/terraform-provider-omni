@@ -5,7 +5,8 @@ output "signed_url_values" {
     group                = omni_user_group.tenant.display_name
     content_path         = "/${omni_folder.tenant.path}"
     folder_id            = omni_folder.tenant.id
-    connection_id        = var.tenant_connection_id
+    connection_id        = coalesce(var.tenant_connection_id, var.base_connection_id)
+    isolation            = var.tenant_connection_id == null ? "shared connection, access filters" : "own connection"
   }
 }
 

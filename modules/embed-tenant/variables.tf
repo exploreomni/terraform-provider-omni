@@ -14,8 +14,17 @@ variable "parent_folder_id" {
 }
 
 variable "tenant_connection_id" {
-  description = "The connection this tenant's sessions are routed to. Created by the warehouse module."
-  type        = string
+  description = <<-DESC
+    A connection of this tenant's own, for physical isolation: their sessions
+    are routed to it instead of the base connection.
+
+    Leave null for the common case, where every tenant shares one connection
+    and rows are isolated by access filters keyed off the user attribute. No
+    connection environment is created then.
+  DESC
+
+  type    = string
+  default = null
 }
 
 variable "content_role" {

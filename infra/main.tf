@@ -30,8 +30,10 @@ provider "omni" {}
 module "warehouse" {
   source = "../modules/warehouse"
 
-  connections = var.connections
-  passwords   = var.connection_passwords
+  connections          = var.connections
+  passwords            = var.connection_passwords
+  private_keys         = var.connection_private_keys
+  oauth_client_secrets = var.connection_oauth_secrets
 }
 
 module "modeling" {
@@ -107,7 +109,7 @@ module "tenant" {
 
   tenant_key           = each.key
   base_connection_id   = module.warehouse.connection_ids[each.value.base_connection]
-  tenant_connection_id = module.warehouse.connection_ids[each.value.connection]
+  tenant_connection_id = each.value.connection == null ? null : module.warehouse.connection_ids[each.value.connection]
   parent_folder_id     = omni_folder.tenants[0].id
 
   content_role = each.value.content_role
