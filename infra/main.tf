@@ -75,44 +75,78 @@ module "access" {
   users = var.users
 
   groups = {
-    for k, v in var.groups : k => merge(v, {
-      model_id      = v.model == null ? null : module.modeling.model_ids[v.model]
-      connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
-    })
+    for k, v in var.groups : k => {
+      members         = v.members
+      model_role      = v.model_role
+      connection_role = v.connection_role
+      model_id        = v.model == null ? null : module.modeling.model_ids[v.model]
+      connection_id   = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
+    }
   }
 
   folders = var.folders
 }
 
 # --------------------------------------------------------------------------
-# Embed: tenants who consume content. Leave tenants empty on an internal-only
-# instance.
+# Embed. Three independent concerns: who the session is, where its queries run,
+# and what content it can see. Each is configured separately, because a tenant
+# may need one without the others.
 # --------------------------------------------------------------------------
 
-# The attribute tenant routing keys off. Fails at plan time when it is missing,
-# which is the point: definitions cannot be created through the API.
+# The attribute tenant scoping keys off. Looked up rather than created:
+# definitions cannot be made through the API. Only read when something uses it.
 data "omni_user_attribute" "tenant" {
-  count = length(var.tenants) > 0 ? 1 : 0
+  count = length(var.tenant_groups) > 0 ? 1 : 0
   name  = var.tenant_attribute
 }
 
-resource "omni_folder" "tenants" {
-  count = length(var.tenants) > 0 ? 1 : 0
+# Who the session is. The "groups" claim in a signed URL resolves to these.
+module "embed_groups" {
+  source = "../modules/embed-groups"
 
-  name = var.tenant_parent_folder
-  path = lower(replace(var.tenant_parent_folder, " ", "-"))
+  prefix = var.tenant_group_prefix
+
+  tenants = {
+    for k, v in var.tenant_groups : k => {
+      model_id      = v.model == null ? null : module.modeling.model_ids[v.model]
+      connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
+      model_role    = v.model_role
+    }
+  }
 }
 
-module "tenant" {
-  source   = "../modules/embed-tenant"
-  for_each = var.tenants
+# Where its queries run. Empty unless a tenant needs its own database or
+# schema; sharing one connection with access filters is the common case.
+module "embed_routing" {
+  source = "../modules/embed-routing"
 
-  tenant_key           = each.key
-  base_connection_id   = module.warehouse.connection_ids[each.value.base_connection]
-  tenant_connection_id = each.value.connection == null ? null : module.warehouse.connection_ids[each.value.connection]
-  parent_folder_id     = omni_folder.tenants[0].id
+  base_connection_id = var.tenant_base_connection == null ? null : module.warehouse.connection_ids[var.tenant_base_connection]
 
-  content_role = each.value.content_role
-  model_role   = each.value.model_role
-  model_id     = each.value.model == null ? null : module.modeling.model_ids[each.value.model]
+  routes = {
+    for k, v in var.tenant_routing : k => {
+      connection_id         = module.warehouse.connection_ids[v.connection]
+      user_attribute_values = v.user_attribute_values
+    }
+  }
+}
+
+# What content it can see. Usually a grant on a hub folder someone else made,
+# not a folder per tenant.
+module "content_access" {
+  source = "../modules/content-access"
+
+  existing_folders = var.existing_folders
+  managed_folders  = var.managed_folders
+
+  grants = {
+    for k, v in var.content_grants : k => {
+      folder = v.folder
+      role   = v.role
+      group_ids = concat(
+        [for g in v.tenant_groups : module.embed_groups.group_ids[g]],
+        [for g in v.internal_groups : module.access.group_ids[g]],
+      )
+      user_ids = v.user_ids
+    }
+  }
 }

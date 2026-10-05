@@ -14,6 +14,10 @@ variable "groups" {
     model_id      = optional(string)
     connection_id = optional(string)
     model_role    = optional(string, "QUERIER")
+
+    # A role on the whole connection rather than one model. Usually
+    # CONNECTION_ADMIN. Requires connection_id and ignores model_id.
+    connection_role = optional(string)
   }))
   default = {}
 }

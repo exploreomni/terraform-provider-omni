@@ -30,6 +30,7 @@ resource "omni_user_group" "this" {
   member_ids = [for email in each.value.members : omni_user.this[email].id]
 }
 
+# A role on one model.
 resource "omni_user_group_model_role" "this" {
   for_each = {
     for k, v in var.groups : k => v if v.model_id != null
@@ -39,6 +40,21 @@ resource "omni_user_group_model_role" "this" {
   model_id      = each.value.model_id
   connection_id = each.value.connection_id
   role_name     = each.value.model_role
+}
+
+# A role on the connection itself, covering every model on it. Given without a
+# model_id, which is what makes it connection scoped rather than model scoped.
+#
+# CONNECTION_ADMIN is the usual value: it lets a group administer the
+# connection and everything built on it. Grant it sparingly.
+resource "omni_user_group_model_role" "connection" {
+  for_each = {
+    for k, v in var.groups : k => v if v.connection_role != null
+  }
+
+  user_group_id = omni_user_group.this[each.key].id
+  connection_id = each.value.connection_id
+  role_name     = each.value.connection_role
 }
 
 resource "omni_folder" "this" {

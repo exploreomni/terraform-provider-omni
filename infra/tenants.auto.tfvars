@@ -1,39 +1,31 @@
-# Embed tenants. A change here is an onboarding or an offboarding.
+# Embed tenants, as three independent concerns.
 #
-# The map key is the value a signed URL passes in userAttributes and the suffix
-# every tenant resource takes.
+# A tenant needs a group. Everything else is optional and declared separately,
+# because needing one does not imply needing the others:
 #
-# Two isolation models, and you can mix them:
+#   tenant_groups    who the session is. The "groups" claim resolves to these.
+#   tenant_routing   where its queries run. Only for physical isolation.
+#   content_grants   what it can see. Usually a shared hub folder.
 #
-#   Shared connection, the common case. Omit "connection". Every tenant queries
-#   the base connection and rows are isolated by access filters in model YAML
-#   keyed off the user attribute. Nothing extra is created.
-#
-#   Own connection, for physical isolation. Set "connection" to a key from
-#   warehouse.auto.tfvars. A connection environment routes that tenant's
-#   sessions to it, so tenants sit in different databases or schemas.
+# Onboarding is one entry in tenant_groups plus one in content_grants, or one
+# line if the tenant joins an existing grant.
 
 tenant_attribute = "tenant_id"
 
-tenants = {
-  # Shared connection with access filters.
-  acme = {
-    base_connection = "embed-base"
-    model           = "embed_metrics"
-    colors          = ["#1f77b4", "#ff7f0e", "#2ca02c"]
-  }
+# Who the session is.
+tenant_groups = {
+  acme     = { model = "embed_metrics", connection = "embed-base" }
+  globex   = { model = "embed_metrics", connection = "embed-base" }
+  initech  = { model = "embed_metrics", connection = "embed-base" }
+}
 
-  # Also shared.
-  globex = {
-    base_connection = "embed-base"
-    model           = "embed_metrics"
-    content_role    = "EXPLORER"
-  }
+# Where its queries run.
+#
+# Empty for most deployments: every tenant shares embed-base and rows are
+# isolated by access filters keyed off tenant_id. initech is here because its
+# data sits in a separate schema.
+tenant_base_connection = "embed-base"
 
-  # Physically isolated: its own connection and schema.
-  initech = {
-    base_connection = "embed-base"
-    connection      = "embed-initech"
-    model           = "embed_metrics"
-  }
+tenant_routing = {
+  initech = { connection = "embed-initech" }
 }

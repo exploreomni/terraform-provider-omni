@@ -160,6 +160,7 @@ func (p *omniProvider) DataSources(_ context.Context) []func() datasource.DataSo
 		NewUserGroupDataSource,
 		NewConnectionDataSource,
 		NewModelDataSource,
+		NewFolderDataSource,
 		NewUserAttributeDataSource,
 		NewUserAttributesDataSource,
 	}

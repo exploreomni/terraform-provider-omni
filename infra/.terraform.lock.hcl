@@ -4,6 +4,6 @@
 provider "registry.terraform.io/ashima-omni/omni" {
   version = "0.1.0"
   hashes = [
-    "h1:Mx7oEC612D28sQQaAvKV6EI0nBgBB4fsUAImpLJztzU=",
+    "h1:winV8bMDhT6H+M18qi+tO8VUHuz2x7sPhT7aByXUfps=",
   ]
 }

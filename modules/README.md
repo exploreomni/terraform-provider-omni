@@ -28,8 +28,15 @@ consume. See `infra/examples/both.tfvars`.
 `warehouse` and `modeling` are shared because a connection is a connection
 whether a person or a signed URL queries it.
 
-`access` and `embed-tenant` are separate because the two kinds of identity work
-differently. Internal users are provisioned through SCIM and hold seats.
+The embed side is three modules rather than one because the concerns are
+genuinely independent. A tenant needs a group. It may or may not need its own
+connection. It may or may not need a folder of its own, and usually does not:
+shared content lives in a hub folder and tenants are granted access to it. An
+earlier version bundled all three into one tenant object, which forced
+unrelated decisions together and created a folder nobody wanted.
+
+`access` and the embed modules are separate because the two kinds of identity
+work differently. Internal users are provisioned through SCIM and hold seats.
 Embed users are created by the session that signs them in, which is why
 `embed-tenant` deliberately sets no group members: membership is authoritative
 here, so Terraform would remove whoever the session added.
@@ -50,7 +57,9 @@ contains is git's business.
 document is part of making the document.
 
 **Embed entities and the embed secret.** No API exists for either, so every
-embed deployment includes a manual step. See `docs/API-COVERAGE.md`.
+embed deployment includes a manual step. The entity creates its own folder,
+owned by the embed system, which is a different object from the folders here.
+See `docs/API-COVERAGE.md`.
 
 ## Conventions
 

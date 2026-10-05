@@ -200,7 +200,31 @@ access**. It only works if the connection's base role is already `NO_ACCESS`.
 
 **Needed:** `DELETE` on both model-roles endpoints.
 
-### Gap 7: API keys cannot be created
+### Gap 7: custom roles have no API
+
+Searching the spec for `role`, `permission`, `grant` and `privilege` returns
+four paths:
+
+```
+DELETE,GET,PATCH,POST,PUT  /api/v1/documents/{identifier}/permissions
+DELETE,GET,PATCH,POST,PUT  /api/v1/folders/{folderId}/permissions
+GET,POST                   /api/v1/user-groups/{id}/model-roles
+GET,POST                   /api/v1/users/{id}/model-roles
+```
+
+Permissions can be granted and roles can be assigned. Roles themselves cannot
+be created, read, updated or deleted. Omni supports custom roles in the UI, but
+they are invisible to the API.
+
+The consequence is specific: a deployment whose access model depends on a
+custom role cannot be replicated to another instance from configuration. The
+role has to be recreated by hand, with the same name, before any assignment
+referencing it will work. Nothing validates that it matches, so a subtle
+difference between environments produces different access with no error.
+
+**Needed:** `POST`, `GET`, `PATCH`, `DELETE /api/v1/roles`.
+
+### Gap 8: API keys cannot be created
 
 ```
 GET            /api/v1/api-keys
