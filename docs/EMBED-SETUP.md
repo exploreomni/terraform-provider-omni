@@ -250,27 +250,90 @@ gate. That is the point of the exercise.
 
 ## What you cannot do today
 
-### Blocking, needs API work
+Ordered by how much Terraform coverage each one unlocks. Every entry was
+checked against the instance OpenAPI spec, not the published docs.
 
-| Gap | Consequence |
+### 1. Embed entities have no API at all
+
+Searching the spec for `embed`, `entity`, `sso` and `tenant` returns three
+endpoints:
+
+```
+GET            /api/scim/v2/embed/Users
+DELETE,GET     /api/scim/v2/embed/Users/{id}
+POST           /api/v1/embed/sso/generate-session
+```
+
+There is no way to create, read, update or delete an embed entity. Entities
+create their own folders, which appear as
+`omni-system-sso-embed-entity-folder-*` owned by "Omni System SSO Embed Admin",
+so the unit that owns per-tenant content is provisioned implicitly by the embed
+system and is invisible to configuration.
+
+This is the largest gap. Onboarding a tenant means creating an entity, and that
+step cannot be code. Everything Terraform does for embed today works *around*
+entities rather than with them.
+
+**Needed:** `POST`, `GET`, `PATCH`, `DELETE /api/v1/embed/entities`, and a way
+to address an entity's folder so permissions can be granted to it.
+
+### 2. User attribute definitions are read-only
+
+`GET /api/v1/user-attributes` only. The schema that row-level security keys off,
+and that every signed URL passes values for, is created by hand in the UI. It
+cannot be versioned, reviewed, or replicated to a new instance.
+
+**Needed:** `POST`, `PATCH`, `DELETE /api/v1/user-attributes`.
+
+### 3. Embed users cannot be created or updated
+
+`GET` and `DELETE` only. Listing and cleanup work, which is more than I first
+assumed, but an embed user's attributes and group membership cannot be set
+before a session exists. That is defensible while everything arrives in the
+signed URL, and it becomes a real limit as soon as you want to seed a tenant's
+users or correct one without waiting for them to log in.
+
+**Needed:** at minimum `PATCH /api/scim/v2/embed/Users/{id}` for attributes and
+group membership.
+
+### 4. The embed secret cannot be managed
+
+Nothing creates or rotates the signing secret. A new instance always needs a
+person in the UI, and rotating across environments is manual.
+
+**Needed:** `POST` and a rotate endpoint for the embed secret.
+
+### 5. Connection environments cannot be read
+
+`POST`, `PUT` and `DELETE` exist; no `GET`. Terraform cannot detect drift or a
+deletion on the resource that implements physical tenant isolation. The
+provider's read is a deliberate no-op and import is refused, because there is
+nothing to import from.
+
+**Needed:** `GET /api/v1/connection-environments`.
+
+### 6. Role assignments cannot be deleted
+
+Destroy can only downgrade to `NO_ACCESS`, which sits at priority 0 and loses to
+the connection base role at 150. So destroying a role resource does not
+reliably revoke access. It works only if the connection's `base_role` is
+`NO_ACCESS`.
+
+**Needed:** `DELETE` on the model-roles endpoints.
+
+### Friction rather than blockers
+
+| | |
 | --- | --- |
-| **Create user attribute definitions** | `GET` only. The schema your tenant scoping depends on is created by hand and cannot be reviewed or replicated from code. |
-| **Create or rotate the embed secret** | No endpoint found. A new instance always needs a person in the UI, and rotating across environments is manual. |
-| **Read connection environments** | No `GET`. Terraform cannot detect drift on the resource that implements physical tenant isolation. |
-
-### Missing from the provider, buildable
-
-| Gap | Notes |
-| --- | --- |
-| Environment user attribute name on a connection | Set in the UI for now. |
-| `omni_label`, schedules for content, dbt config, model git config | All have full CRUD in the API. |
-| Document permissions beyond grants | The ability flags, `canDownload` and so on, are not yet a resource. |
+| Inconsistent identifiers | A group is `uoFHWGHz` via SCIM and a full UUID in a permissions permit. Correlating them costs a name lookup per group on every read. |
+| No rate limit headers | No `X-RateLimit-*` or `Retry-After`, so every client guesses its backoff. |
+| Partial, inconsistent write responses | Create omits `url`; update omits `url` and `scope`; permits nest `role` under `direct` where the schema shows it flat. Seven of the findings in the test plan trace to this. The cheap fix is making the documented schema match reality. |
+| No get-by-id for folders or models | Reads page a list and match. Fine at eight folders, poor at eight thousand. |
 
 ### Out of scope by design
 
 | | Why |
 | --- | --- |
-| Embed user provisioning | Sessions create them. The API is read and delete only, which is correct. |
 | Dashboard authoring | Interactive work belongs in the UI. |
 | Access grants and access filters | Model content. Declared in model YAML, versioned through git sync. |
 | Generating signed URLs | Runtime, not infrastructure. |
