@@ -1,33 +1,25 @@
-# IDs of everything under management, so downstream configs and humans can find
-# resources without clicking through the UI.
+output "connections" {
+  value = module.warehouse.connection_ids
+}
 
-output "folder_ids" {
-  description = "Folder name to ID."
+output "models" {
+  value = module.modeling.model_ids
+}
+
+output "internal" {
+  description = "Internal users, groups and folders. Empty on an embed-only instance."
   value = {
-    reporting = omni_folder.reporting.id
-    finance   = omni_folder.finance.id
+    users   = module.access.user_ids
+    groups  = module.access.group_ids
+    folders = module.access.folder_ids
   }
 }
 
-output "folders" {
-  description = "Full folder detail, including paths and UI links."
-  value = {
-    for k, f in {
-      reporting = omni_folder.reporting
-      finance   = omni_folder.finance
-      } : k => {
-      id    = f.id
-      name  = f.name
-      path  = f.path
-      url   = f.url
-      scope = f.scope
-    }
-  }
+output "tenants" {
+  description = "What a signed URL needs for each tenant. Empty on an internal-only instance."
+  value       = { for k, m in module.tenant : k => m.signed_url_values }
 }
 
-output "user_group_ids" {
-  description = "User group name to ID."
-  value = {
-    finance = omni_user_group.finance.id
-  }
+output "branding" {
+  value = module.branding.palette_ids
 }
