@@ -21,6 +21,20 @@ variable "connections" {
     query_timeout_seconds = optional(number)
     base_role             = optional(string, "NO_ACCESS")
 
+    # Authentication, beyond a plain username and password.
+    authentication_type = optional(string)
+    oauth_client_id     = optional(string)
+    use_machine_auth    = optional(bool)
+    aws_role_arn        = optional(string)
+    host_override       = optional(string)
+
+    wif_audience              = optional(string)
+    wif_service_account_email = optional(string)
+
+    external_oauth_audience          = optional(string)
+    external_oauth_authorization_url = optional(string)
+    external_oauth_token_url         = optional(string)
+
     refresh_schedule = optional(object({
       cron         = string
       timezone     = string
@@ -32,7 +46,26 @@ variable "connections" {
 }
 
 variable "passwords" {
-  description = "Password per connection, keyed the same as connections. Pass from a secret, never a literal."
+  description = <<-DESC
+    Password per connection, keyed the same as connections. For BigQuery with a
+    service account this is the full service account JSON, not a password.
+    Pass from a secret, never a literal.
+  DESC
+
+  type      = map(string)
+  sensitive = true
+  default   = {}
+}
+
+variable "private_keys" {
+  description = "RSA private key per connection, PEM format, for Snowflake key pair authentication."
+  type        = map(string)
+  sensitive   = true
+  default     = {}
+}
+
+variable "oauth_client_secrets" {
+  description = "OAuth client secret per connection, for Snowflake or BigQuery OAuth."
   type        = map(string)
   sensitive   = true
   default     = {}

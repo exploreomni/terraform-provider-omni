@@ -61,6 +61,8 @@ type ConnectionInput struct {
 	HostOverride                  *string `json:"hostOverride,omitempty"`
 	OauthClientID                 *string `json:"oauthClientId,omitempty"`
 	OauthClientSecretUnencrypted  *string `json:"oauthClientSecretUnencrypted,omitempty"`
+	WifAudience                   *string `json:"wifAudience,omitempty"`
+	WifServiceAccountEmail        *string `json:"wifServiceAccountEmail,omitempty"`
 	ExternalOauthAudience         *string `json:"externalOauthAudience,omitempty"`
 	ExternalOauthAuthorizationURL *string `json:"externalOauthAuthorizationUrl,omitempty"`
 	ExternalOauthTokenURL         *string `json:"externalOauthTokenUrl,omitempty"`

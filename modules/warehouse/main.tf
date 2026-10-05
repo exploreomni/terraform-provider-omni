@@ -27,6 +27,32 @@ resource "omni_connection" "this" {
   default_schema = each.value.default_schema
   scratch_schema = each.value.scratch_schema
 
+  # Authentication. Which of these apply depends on the dialect and the method:
+  #
+  #   Snowflake, password        password
+  #   Snowflake, key pair        private_key, username
+  #   Snowflake, external OAuth  oauth_client_id, oauth_client_secret,
+  #                              external_oauth_* and authentication_type
+  #   BigQuery, service account  username is the client email, password is the
+  #                              full service account JSON, database is the
+  #                              project ID
+  #   BigQuery, OAuth            oauth_client_id, oauth_client_secret
+  #   Athena, Databricks         use_machine_auth, aws_role_arn
+  authentication_type = each.value.authentication_type
+  private_key         = try(var.private_keys[each.key], null)
+  oauth_client_id     = each.value.oauth_client_id
+  oauth_client_secret = try(var.oauth_client_secrets[each.key], null)
+  use_machine_auth    = each.value.use_machine_auth
+  aws_role_arn        = each.value.aws_role_arn
+  host_override       = each.value.host_override
+
+  wif_audience              = each.value.wif_audience
+  wif_service_account_email = each.value.wif_service_account_email
+
+  external_oauth_audience          = each.value.external_oauth_audience
+  external_oauth_authorization_url = each.value.external_oauth_authorization_url
+  external_oauth_token_url         = each.value.external_oauth_token_url
+
   include_schemas       = each.value.include_schemas
   query_timeout_seconds = each.value.query_timeout_seconds
 

@@ -80,9 +80,9 @@ func (r *labelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					"non-admin token gets a 403 when setting this.",
 			},
 			"verified": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Mark the label as verified. Requires admin permissions.",
 			},
 			"usage_count": schema.Float64Attribute{

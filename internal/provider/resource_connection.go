@@ -26,8 +26,21 @@ var (
 // supportedDialects mirrors the Dialect enum in the Omni OpenAPI spec.
 var supportedDialects = []string{
 	"athena", "bigquery", "clickhouse", "databricks", "databricks_lakebase",
-	"exasol", "mariadb", "motherduck", "mssql", "mysql", "oracle", "postgres",
-	"redshift", "sap_hana", "snowflake", "starrocks", "trino",
+	"exasol", "fabric", "mariadb", "motherduck", "mssql", "mysql", "oracle",
+	"postgres", "redshift", "sap_hana", "snowflake", "starrocks", "trino",
+}
+
+// authenticationTypes are the values the API documents. Dialect-specific: a
+// Snowflake connection cannot use a BigQuery method.
+var authenticationTypes = []string{
+	"aws-access-key", "aws-cross-account-role",
+	"bigquery-byo-oauth-user", "bigquery-oauth-user", "bigquery-service-account",
+	"bigquery-workload-identity-federation",
+	"databricks-oauth-m2m", "databricks-oauth-user", "databricks-personal-access-token",
+	"mssql-active-directory-password", "mssql-active-directory-service-principal",
+	"mssql-sql-authentication",
+	"snowflake-external-oauth-user", "snowflake-keypair", "snowflake-oauth-user",
+	"snowflake-password",
 }
 
 // NewConnectionResource returns the omni_connection resource.
@@ -78,6 +91,8 @@ type connectionResourceModel struct {
 	HostOverride                  types.String `tfsdk:"host_override"`
 	OauthClientID                 types.String `tfsdk:"oauth_client_id"`
 	OauthClientSecret             types.String `tfsdk:"oauth_client_secret"`
+	WifAudience                   types.String `tfsdk:"wif_audience"`
+	WifServiceAccountEmail        types.String `tfsdk:"wif_service_account_email"`
 	ExternalOauthAudience         types.String `tfsdk:"external_oauth_audience"`
 	ExternalOauthAuthorizationURL types.String `tfsdk:"external_oauth_authorization_url"`
 	ExternalOauthTokenURL         types.String `tfsdk:"external_oauth_token_url"`
@@ -264,9 +279,12 @@ func (r *connectionResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers:       replaceBool,
 			},
 			"authentication_type": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "BigQuery, MSSQL, Snowflake, Databricks, and Athena only. Authentication method.",
-				PlanModifiers:       replaceString,
+				Optional:   true,
+				Validators: []validator.String{stringvalidator.OneOf(authenticationTypes...)},
+				MarkdownDescription: "Authentication method. Dialect specific: a Snowflake connection cannot " +
+					"use a BigQuery method. Common values are `snowflake-password`, `snowflake-keypair`, " +
+					"`bigquery-service-account` and `databricks-personal-access-token`.",
+				PlanModifiers: replaceString,
 			},
 			"aws_role_arn": schema.StringAttribute{
 				Optional:            true,
@@ -288,6 +306,19 @@ func (r *connectionResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Sensitive:           true,
 				MarkdownDescription: "Snowflake and Databricks only. OAuth client secret, sent as `oauthClientSecretUnencrypted`.",
 				PlanModifiers:       replaceString,
+			},
+			"wif_audience": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Full resource name of the workload identity pool provider, for BigQuery " +
+					"workload identity federation. For example " +
+					"`//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/my-pool/providers/my-provider`.",
+				PlanModifiers: replaceString,
+			},
+			"wif_service_account_email": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Service account to impersonate for BigQuery workload identity " +
+					"federation. Omit to use the federated identity directly.",
+				PlanModifiers: replaceString,
 			},
 			"external_oauth_audience": schema.StringAttribute{
 				Optional:            true,
@@ -472,6 +503,8 @@ func connectionInputFromPlan(plan connectionResourceModel) client.ConnectionInpu
 		HostOverride:                  stringPtr(plan.HostOverride),
 		OauthClientID:                 stringPtr(plan.OauthClientID),
 		OauthClientSecretUnencrypted:  stringPtr(plan.OauthClientSecret),
+		WifAudience:                   stringPtr(plan.WifAudience),
+		WifServiceAccountEmail:        stringPtr(plan.WifServiceAccountEmail),
 		ExternalOauthAudience:         stringPtr(plan.ExternalOauthAudience),
 		ExternalOauthAuthorizationURL: stringPtr(plan.ExternalOauthAuthorizationURL),
 		ExternalOauthTokenURL:         stringPtr(plan.ExternalOauthTokenURL),
