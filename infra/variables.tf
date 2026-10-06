@@ -77,8 +77,20 @@ variable "users" {
 }
 
 variable "groups" {
-  description = "Internal groups, keyed by display name. model and connection are keys from var.models and var.connections."
+  description = <<-DESC
+    Internal groups, keyed by a stable name of your choosing. model and
+    connection are keys from var.models and var.connections.
+
+    The key is the group's identity. It becomes the visible name unless
+    display_name overrides it, and re-keying replaces the group rather than
+    renaming it, so set display_name to change only the label.
+  DESC
+
   type = map(object({
+    # Overrides the key as the visible name. Set this to rename a group without
+    # re-keying it, which would replace it instead.
+    display_name = optional(string)
+
     members    = optional(list(string), [])
     model      = optional(string)
     connection = optional(string)
@@ -102,14 +114,49 @@ variable "groups" {
 }
 
 variable "folders" {
-  description = "Internal folders, keyed by path."
+  description = <<-DESC
+    Internal folders, keyed by path.
+
+    scope is required, not defaulted. It decides who can reach the folder
+    before the groups below are granted anything:
+
+      organization  org-wide shared content, with the grant adding a role
+      restricted    reachable only through the grant, and needs owner_id when
+                    the provider uses an organization API key
+
+    Most internal folders are organization. Use restricted for content one
+    team should hold on its own.
+  DESC
+
   type = map(object({
-    name   = string
-    scope  = optional(string, "organization")
-    groups = optional(list(string), [])
-    role   = optional(string, "EDITOR")
+    name     = string
+    scope    = optional(string)
+    owner_id = optional(string)
+    groups   = optional(list(string), [])
+    role     = optional(string, "EDITOR")
   }))
   default = {}
+
+  validation {
+    condition     = alltrue([for k, v in var.folders : v.scope != null])
+    error_message = "Every folder must state a scope: organization or restricted."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.folders :
+      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
+    ])
+    error_message = "scope must be organization or restricted."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.folders :
+      coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
+    ])
+    error_message = "A restricted folder needs owner_id when the provider uses an organization API key."
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -138,6 +185,10 @@ variable "tenant_groups" {
   DESC
 
   type = map(object({
+    # Overrides the generated prefix + key. Set this to rename a tenant group
+    # without re-keying it, which would replace it.
+    display_name = optional(string)
+
     model      = optional(string)
     connection = optional(string)
     model_role = optional(string, "QUERY_TOPICS")
@@ -189,10 +240,25 @@ variable "existing_folders" {
 }
 
 variable "managed_folders" {
-  description = "Folders to create, keyed by local name."
+  description = <<-DESC
+    Folders to create, keyed by local name.
+
+    scope is required on a top-level folder: organization or restricted. A
+    restricted folder also needs owner_id when the provider uses an
+    organization API key. A nested folder inherits its parent's scope and must
+    not set one.
+
+    Every attribute the module accepts has to be declared here too. Terraform
+    drops an attribute a variable's type does not mention, without warning, so
+    an undeclared scope would be discarded on the way through and the folder
+    would silently fall back to the provider default.
+  DESC
+
   type = map(object({
     name               = string
     parent             = optional(string)
+    scope              = optional(string)
+    owner_id           = optional(string)
     delete_recursively = optional(bool, false)
   }))
   default = {}
