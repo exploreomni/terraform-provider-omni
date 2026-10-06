@@ -89,6 +89,16 @@ variable "groups" {
     connection_role = optional(string)
   }))
   default = {}
+
+  validation {
+    condition     = alltrue([for k, v in var.groups : v.model == null || v.connection != null])
+    error_message = "A group with a model also needs a connection: a model role is scoped to both."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.groups : v.connection_role == null || v.connection != null])
+    error_message = "A group with a connection_role also needs a connection."
+  }
 }
 
 variable "folders" {
@@ -137,6 +147,11 @@ variable "tenant_groups" {
   }))
 
   default = {}
+
+  validation {
+    condition     = alltrue([for k, v in var.tenant_groups : v.model == null || v.connection != null])
+    error_message = "A tenant group with a model also needs a connection: a model role is scoped to both."
+  }
 }
 
 variable "tenant_base_connection" {
