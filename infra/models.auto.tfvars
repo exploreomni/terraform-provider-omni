@@ -5,7 +5,7 @@
 
 models = {
   "embed_metrics" = {
-    kind       = "SHARED_EXTENSION"
+    kind       = "SHARED"
     connection = "embed-base"
   }
 }
