@@ -12,6 +12,24 @@ variable "managed_folders" {
     delete_recursively = optional(bool, false)
   }))
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      v.parent == null || contains(keys(var.managed_folders), v.parent)
+    ])
+    error_message = "Every parent must be another key in managed_folders."
+  }
+
+  validation {
+    # One level of nesting. A child of a child would fail later with an
+    # unhelpful index error, so it is caught here instead.
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      v.parent == null || try(var.managed_folders[v.parent].parent, null) == null
+    ])
+    error_message = "managed_folders supports one level of nesting: a parent cannot itself have a parent."
+  }
 }
 
 variable "grants" {
