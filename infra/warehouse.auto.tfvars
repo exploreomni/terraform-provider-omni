@@ -5,7 +5,7 @@
 # store or TF_VAR_ in CI.
 #
 # Most tenants share embed-base. Only a tenant needing its own database or
-# schema gets a connection of its own, like embed-initech below.
+# schema gets a connection of its own.
 
 connections = {
   "embed-base" = {
@@ -17,13 +17,4 @@ connections = {
     base_role = "NO_ACCESS"
   }
 
-  "embed-initech" = {
-    dialect        = "snowflake"
-    host           = "your-account"
-    database       = "ANALYTICS"
-    default_schema = "INITECH"
-    warehouse      = "EMBED_WH"
-    username       = "OMNI_EMBED"
-    base_role      = "NO_ACCESS"
-  }
 }
