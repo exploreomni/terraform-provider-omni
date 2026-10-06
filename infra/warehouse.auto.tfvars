@@ -9,13 +9,5 @@
 
 
 connections = {
-  "embed-base" = {
-    dialect   = "snowflake"
-    host      = "pojcdlp-ja12247"
-    database  = "ANALYTICS"
-    warehouse = "OMNI_WH"
-    username  = "OMNI_SVC"
-    base_role = "NO_ACCESS"
-  }
 
 }
