@@ -12,8 +12,8 @@ connections = {
     dialect   = "snowflake"
     host      = "pojcdlp-ja12247"
     database  = "ANALYTICS"
-    warehouse = "EMBED_WH"
-    username  = "OMNI_EMBED"
+    warehouse = "OMNI_WH"
+    username  = "OMNI_SVC"
     base_role = "NO_ACCESS"
   }
 
