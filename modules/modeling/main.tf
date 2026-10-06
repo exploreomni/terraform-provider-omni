@@ -26,8 +26,8 @@ resource "omni_model_git" "this" {
     for k, v in var.models : k => v if v.git != null
   }
 
-  model_id   = omni_model.this[each.key].id
-  clone_url  = each.value.git.clone_url
+  model_id    = omni_model.this[each.key].id
+  clone_url   = each.value.git.clone_url
   auth_method = each.value.git.auth_method
 
   base_branch             = each.value.git.base_branch

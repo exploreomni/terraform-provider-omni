@@ -14,9 +14,9 @@ tenant_attribute = "tenant_id"
 
 # Who the session is.
 tenant_groups = {
-  acme     = { model = "embed_metrics", connection = "embed-base" }
-  globex   = { model = "embed_metrics", connection = "embed-base" }
-  initech  = { model = "embed_metrics", connection = "embed-base" }
+  acme    = { model = "embed_metrics", connection = "embed-base" }
+  globex  = { model = "embed_metrics", connection = "embed-base" }
+  initech = { model = "embed_metrics", connection = "embed-base" }
 }
 
 # Where its queries run.

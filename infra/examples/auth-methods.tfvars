@@ -9,7 +9,7 @@ connections = {
   # Snowflake, password. The simplest case.
   "snowflake-password" = {
     dialect   = "snowflake"
-    host      = "myaccount"          # account identifier only, not a URL
+    host      = "myaccount" # account identifier only, not a URL
     database  = "ANALYTICS"
     warehouse = "COMPUTE_WH"
     username  = "OMNI_SVC"
@@ -26,11 +26,11 @@ connections = {
 
   # Snowflake, external OAuth.
   "snowflake-oauth" = {
-    dialect             = "snowflake"
-    host                = "myaccount"
-    database            = "ANALYTICS"
-    warehouse           = "COMPUTE_WH"
-    oauth_client_id     = "omni-client"
+    dialect                          = "snowflake"
+    host                             = "myaccount"
+    database                         = "ANALYTICS"
+    warehouse                        = "COMPUTE_WH"
+    oauth_client_id                  = "omni-client"
     external_oauth_audience          = "https://myaccount.snowflakecomputing.com"
     external_oauth_authorization_url = "https://idp.example.com/oauth2/authorize"
     external_oauth_token_url         = "https://idp.example.com/oauth2/token"
