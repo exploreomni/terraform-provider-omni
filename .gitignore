@@ -30,3 +30,6 @@ terraform.rc
 
 # The lock file is committed on purpose: CI installs the provider from a
 # filesystem mirror and needs the recorded checksums.
+
+# No stable checksum while the provider is built from source on each run.
+.terraform.lock.hcl
