@@ -7,6 +7,7 @@
 # Most tenants share embed-base. Only a tenant needing its own database or
 # schema gets a connection of its own.
 
+
 connections = {
   "embed-base" = {
     dialect   = "snowflake"
