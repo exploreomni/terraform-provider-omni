@@ -131,6 +131,9 @@ variable "tenant_groups" {
     model      = optional(string)
     connection = optional(string)
     model_role = optional(string, "QUERY_TOPICS")
+
+    # Optional per-tenant palette, picked up by the branding module.
+    colors = optional(list(string))
   }))
 
   default = {}

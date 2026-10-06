@@ -54,7 +54,7 @@ module "branding" {
   palettes = merge(
     var.palettes,
     {
-      for k, v in var.tenants : "tenant-${k}" => {
+      for k, v in var.tenant_groups : "tenant-${k}" => {
         type   = "discrete"
         colors = v.colors
       } if v.colors != null
