@@ -25,9 +25,15 @@ resource "omni_user_group" "tenant" {
 # Optional: what the group can do with data. Skipped for a tenant with no
 # model, which is the right default when access comes from a shared grant
 # elsewhere.
+#
+# The filter is on grant_model_role, not on model_id. A model_id usually comes
+# from a model Terraform is creating in the same run, so it is unknown until
+# apply, and Terraform refuses a for_each whose set of keys it cannot work out
+# at plan time. grant_model_role is set from configuration, so the keys are
+# known and only the values arrive late.
 resource "omni_user_group_model_role" "tenant" {
   for_each = {
-    for k, v in var.tenants : k => v if v.model_id != null
+    for k, v in var.tenants : k => v if v.grant_model_role
   }
 
   user_group_id = omni_user_group.tenant[each.key].id
