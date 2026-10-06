@@ -39,6 +39,11 @@ module "warehouse" {
 module "modeling" {
   source = "../modules/modeling"
 
+  # A model is built on a connection. The connection_id below already creates
+  # this dependency, but stating it covers the case where every model in
+  # var.models omits a connection and the implicit edge disappears.
+  depends_on = [module.warehouse]
+
   models = {
     for k, v in var.models : k => merge(v, {
       connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
@@ -50,6 +55,9 @@ module "modeling" {
 
 module "branding" {
   source = "../modules/branding"
+
+  # No depends_on. Palettes and labels reference nothing else, so this layer
+  # runs first and in parallel with the warehouse rather than waiting on it.
 
   palettes = merge(
     var.palettes,
@@ -72,15 +80,23 @@ module "branding" {
 module "access" {
   source = "../modules/access"
 
+  depends_on = [module.modeling]
+
   users = var.users
 
   groups = {
     for k, v in var.groups : k => {
+      display_name    = v.display_name
       members         = v.members
       model_role      = v.model_role
       connection_role = v.connection_role
-      model_id        = v.model == null ? null : module.modeling.model_ids[v.model]
-      connection_id   = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
+
+      # Derived from the model name in configuration, not from the id below.
+      # The name is known now; the id is not known until the model exists.
+      grant_model_role = v.model != null
+
+      model_id      = v.model == null ? null : module.modeling.model_ids[v.model]
+      connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
     }
   }
 
@@ -104,10 +120,15 @@ data "omni_user_attribute" "tenant" {
 module "embed_groups" {
   source = "../modules/embed-groups"
 
+  depends_on = [module.modeling]
+
   prefix = var.tenant_group_prefix
 
   tenants = {
     for k, v in var.tenant_groups : k => {
+      display_name     = v.display_name
+      grant_model_role = v.model != null
+
       model_id      = v.model == null ? null : module.modeling.model_ids[v.model]
       connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
       model_role    = v.model_role
@@ -119,6 +140,8 @@ module "embed_groups" {
 # schema; sharing one connection with access filters is the common case.
 module "embed_routing" {
   source = "../modules/embed-routing"
+
+  depends_on = [module.warehouse]
 
   base_connection_id = var.tenant_base_connection == null ? null : module.warehouse.connection_ids[var.tenant_base_connection]
 
@@ -134,6 +157,11 @@ module "embed_routing" {
 # not a folder per tenant.
 module "content_access" {
   source = "../modules/content-access"
+
+  # Grants name groups, so both group layers must exist first. The group_ids
+  # lookups below imply this only while content_grants is non-empty; stated
+  # here it holds even when it is empty.
+  depends_on = [module.embed_groups, module.access]
 
   existing_folders = var.existing_folders
   managed_folders  = var.managed_folders
