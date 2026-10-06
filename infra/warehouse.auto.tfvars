@@ -10,7 +10,7 @@
 connections = {
   "embed-base" = {
     dialect   = "snowflake"
-    host      = "your-account"
+    host      = "pojcdlp-ja12247"
     database  = "ANALYTICS"
     warehouse = "EMBED_WH"
     username  = "OMNI_EMBED"

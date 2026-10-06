@@ -31,9 +31,13 @@ resource "omni_user_group" "this" {
 }
 
 # A role on one model.
+#
+# Filtered on grant_model_role rather than on model_id: the id is normally an
+# attribute of a model created in the same run, and a for_each whose keys
+# depend on an apply-time value is rejected at plan time.
 resource "omni_user_group_model_role" "this" {
   for_each = {
-    for k, v in var.groups : k => v if v.model_id != null
+    for k, v in var.groups : k => v if v.grant_model_role
   }
 
   user_group_id = omni_user_group.this[each.key].id

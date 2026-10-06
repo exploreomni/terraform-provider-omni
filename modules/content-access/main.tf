@@ -28,12 +28,28 @@ data "omni_folder" "existing" {
   path = each.value
 }
 
+# Top-level folders and nested ones are two resources rather than one.
+#
+# A single resource whose parent_folder_id points at another instance of itself
+# is a self-reference, which Terraform rejects outright. Splitting by depth
+# removes the cycle: "child" refers to "managed", never to itself.
+#
+# This supports one level of nesting, which is what a hub-and-subfolder layout
+# needs. A deeper tree needs a third resource, or the folders creating
+# themselves by path.
 resource "omni_folder" "managed" {
-  for_each = var.managed_folders
+  for_each = { for k, v in var.managed_folders : k => v if v.parent == null }
 
   name               = each.value.name
-  path               = each.value.parent == null ? each.key : null
-  parent_folder_id   = each.value.parent == null ? null : omni_folder.managed[each.value.parent].id
+  path               = each.key
+  delete_recursively = each.value.delete_recursively
+}
+
+resource "omni_folder" "child" {
+  for_each = { for k, v in var.managed_folders : k => v if v.parent != null }
+
+  name               = each.value.name
+  parent_folder_id   = omni_folder.managed[each.value.parent].id
   delete_recursively = each.value.delete_recursively
 }
 
@@ -42,6 +58,7 @@ locals {
   folder_ids = merge(
     { for k, f in data.omni_folder.existing : k => f.id },
     { for k, f in omni_folder.managed : k => f.id },
+    { for k, f in omni_folder.child : k => f.id },
   )
 }
 
