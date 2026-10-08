@@ -44,6 +44,10 @@ variable "connections" {
     #
     # Create the schema model with a kind = "SCHEMA" entry in var.models, which
     # is the API equivalent of the UI's "Build Schema" button.
+    #
+    # The schedule is declared here but created by modules/schema-refresh,
+    # which runs after modeling. Keeping it in this module would create it
+    # before the schema model existed.
     refresh_schedule = optional(object({
       cron         = string
       timezone     = string

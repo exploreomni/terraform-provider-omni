@@ -62,16 +62,7 @@ resource "omni_connection" "this" {
   base_role = each.value.base_role
 }
 
-resource "omni_connection_schedule" "this" {
-  for_each = {
-    for k, v in var.connections : k => v if v.refresh_schedule != null
-  }
-
-  connection_id = omni_connection.this[each.key].id
-
-  # Six-field EventBridge cron: minute hour day-of-month month day-of-week year.
-  # Daily at 02:00 is "0 2 * * ? *".
-  schedule     = each.value.refresh_schedule.cron
-  timezone     = each.value.refresh_schedule.timezone
-  hard_refresh = each.value.refresh_schedule.hard_refresh
-}
+# Schema refresh schedules are created by modules/schema-refresh, not here.
+# They cannot exist until the connection has a schema model, which the modeling
+# module creates, and modeling already depends on this module. Keeping the
+# schedule here would guarantee the wrong order.
