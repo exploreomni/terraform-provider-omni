@@ -112,7 +112,7 @@ variable "user_attributes" {
     Settings > User attributes. List them with:
 
       curl -s -H "Authorization: Bearer $OMNI_API_TOKEN" \
-        "$OMNI_BASE_URL/api/v1/user-attributes"
+        "$OMNI_BASE_URL/v1/user-attributes"
 
     IDs rather than names, because a definition can be renamed and a
     configuration naming it would stop matching in silence.
@@ -127,9 +127,13 @@ variable "user_attribute_values" {
     Attribute values per person, as an email to a map of keys from
     var.user_attributes to values.
 
-    Per person because Omni has no API for assigning values to a group: the
-    SCIM group resource carries no attribute extension and the only attribute
-    endpoint is a read.
+    Per person because Omni has no concept of a group-assigned value. A user's
+    value comes from a direct assignment or the definition's default, and
+    nothing else: the attribute's Users page in the UI offers exactly those two
+    sources.
+
+    Groups do have "allowed user attribute values", which is a different thing
+    - the set a member may switch an attribute to - and is not an assignment.
   DESC
 
   type    = map(map(string))

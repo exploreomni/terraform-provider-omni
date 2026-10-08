@@ -1,6 +1,14 @@
 # Internal people who build content. Empty on an embed-only instance.
 
-users = {}
+# Imported, not created. omni_user calls SCIM directly with no adopt-if-exists,
+# so an account that already exists has to be imported or the apply fails:
+#
+#   terraform import 'module.access.omni_user.this["ashima@omni.co"]' <user id>
+users = {
+  "ashima@omni.co" = {
+    display_name = "Ashima Mahajan"
+  }
+}
 
 # Two groups, covering the two scopes a role can have.
 #
