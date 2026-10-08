@@ -207,4 +207,14 @@ module "content_access" {
       user_ids  = v.user_ids
     }
   }
+
+  document_grants = {
+    for k, v in var.document_grants : k => {
+      document_id  = v.document_id
+      role         = v.role
+      group_ids    = [for g in v.groups : module.access.group_ids[g]]
+      user_ids     = v.user_ids
+      access_boost = v.access_boost
+    }
+  }
 }

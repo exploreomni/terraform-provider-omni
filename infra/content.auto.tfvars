@@ -30,3 +30,7 @@ content_grants = {
     groups = ["analysts"]
   }
 }
+
+# Grants on an individual document. Empty: prefer a folder grant, and this needs
+# a document ID from the UI, since documents are not created by Terraform.
+document_grants = {}

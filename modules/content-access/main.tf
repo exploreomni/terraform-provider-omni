@@ -77,3 +77,28 @@ resource "omni_folder_permission" "this" {
   user_group_ids = each.value.group_ids
   user_ids       = each.value.user_ids
 }
+
+# Grants on a single document rather than on the folder holding it.
+#
+# A folder grant is almost always the right tool: it covers everything in the
+# folder and keeps access describable in one place. This exists for the case a
+# folder grant cannot express - one dashboard shared more widely than the folder
+# around it.
+#
+# document_id is a literal identifier, not a reference. Documents are created in
+# the UI, so Terraform has nothing to resolve a name against, and the ID is the
+# only stable handle.
+#
+# Destroying this does not revoke the grant. The documents API has no endpoint
+# for that, so the provider downgrades the role to NO_ACCESS, which is subject
+# to the same priority rules as a model role: a permissive grant inherited from
+# the folder still applies.
+resource "omni_document_permission" "this" {
+  for_each = var.document_grants
+
+  document_id    = each.value.document_id
+  role           = each.value.role
+  user_group_ids = each.value.group_ids
+  user_ids       = each.value.user_ids
+  access_boost   = each.value.access_boost
+}

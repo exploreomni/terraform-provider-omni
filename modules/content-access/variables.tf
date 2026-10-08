@@ -108,3 +108,21 @@ variable "grants" {
     error_message = "A grant must name at least one group or user. Remove the grant rather than leaving it empty."
   }
 }
+
+variable "document_grants" {
+  description = <<-DESC
+    Grants on individual documents, keyed by local name. group_ids and user_ids
+    are resolved by the caller; document_id is a literal identifier, because
+    documents are made in the UI and there is no name to resolve.
+  DESC
+
+  type = map(object({
+    document_id  = string
+    role         = optional(string, "VIEWER")
+    group_ids    = optional(list(string), [])
+    user_ids     = optional(list(string))
+    access_boost = optional(bool)
+  }))
+
+  default = {}
+}

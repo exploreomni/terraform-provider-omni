@@ -46,8 +46,9 @@ output "tenants" {
 output "content" {
   description = "Folders in play, looked up and created, and who was granted what."
   value = {
-    folders = module.content_access.folder_ids
-    grants  = module.content_access.grant_ids
+    folders         = module.content_access.folder_ids
+    grants          = module.content_access.grant_ids
+    document_grants = module.content_access.document_grant_ids
   }
 }
 

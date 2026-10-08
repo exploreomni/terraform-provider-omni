@@ -489,6 +489,70 @@ variable "managed_folders" {
   }
 }
 
+variable "document_grants" {
+  description = <<-DESC
+    Grants on a single document, keyed by a local name. groups are keys from
+    var.groups.
+
+    Prefer a folder grant. It covers everything in the folder and keeps access
+    describable in one place; a document grant is for the case a folder grant
+    cannot express, such as one dashboard shared more widely than the folder
+    around it.
+
+    document_id is a literal identifier rather than a reference. Documents are
+    created in the UI, so there is no Terraform-side name to resolve, and this
+    is the one place a raw ID in configuration is unavoidable. Take it from the
+    document's URL.
+
+    Destroying a grant does not revoke it: the documents API has no endpoint for
+    that, so the role is downgraded to NO_ACCESS, and a permissive grant
+    inherited from the enclosing folder still applies.
+  DESC
+
+  type = map(object({
+    document_id = string
+    role        = optional(string, "VIEWER")
+    groups      = optional(list(string), [])
+    user_ids    = optional(list(string))
+
+    # Rejected with 403 when the organization has AccessBoost turned off.
+    access_boost = optional(bool)
+  }))
+
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.document_grants :
+      length(v.groups) + length(coalesce(v.user_ids, [])) > 0
+    ])
+    error_message = format(
+      "These document grants name no groups and no users: %s. A grant needs at least one of groups or user_ids; the provider rejects an empty one. Remove the grant rather than leaving it empty.",
+      join("; ", [
+        for k, v in var.document_grants : "grant \"${k}\" on document \"${v.document_id}\""
+        if length(v.groups) + length(coalesce(v.user_ids, [])) == 0
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.document_grants : [
+        for g in v.groups : contains(keys(var.groups), g)
+      ]
+    ]))
+    error_message = format(
+      "These document grants name a group that is not in var.groups: %s. Drop it from the grant in the same change.",
+      join("; ", flatten([
+        for k, v in var.document_grants : [
+          for g in v.groups : "grant \"${k}\" names group \"${g}\""
+          if !contains(keys(var.groups), g)
+        ]
+      ]))
+    )
+  }
+}
+
 variable "content_grants" {
   description = <<-DESC
     Who can see which folder. folder is a key from existing_folders or

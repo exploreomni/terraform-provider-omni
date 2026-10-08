@@ -6,3 +6,7 @@ output "folder_ids" {
 output "grant_ids" {
   value = { for k, p in omni_folder_permission.this : k => p.id }
 }
+
+output "document_grant_ids" {
+  value = { for k, p in omni_document_permission.this : k => p.id }
+}
