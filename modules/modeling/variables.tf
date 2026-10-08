@@ -12,8 +12,12 @@ variable "models" {
     the UI's "Build Schema". A connection needs one before anything else can be
     built on it, and schema models are created ahead of every other kind.
 
-    A schema model ignores name: Omni names it after its connection. The key is
-    still yours and is what other modules reference.
+    A schema model ignores name: Omni names it after its connection, and shares
+    its connection's ID. The key is still yours and is what other modules
+    reference.
+
+    A schema model also cannot be deleted. Destroying one removes it from state
+    only; Omni removes it with the connection.
 
     kind, connection_id and base_model_id all force replacement.
   DESC

@@ -74,6 +74,8 @@ func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			// A SCHEMA model cannot be deleted through the API, so destroying one
+			// only removes it from state. Omni removes it with its connection.
 			"model_kind": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
@@ -269,6 +271,25 @@ func (r *modelResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	var state modelResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() || notConfigured(r.client, &resp.Diagnostics) {
+		return
+	}
+
+	// A schema model belongs to its connection and shares its ID. The API
+	// refuses to delete one: "Cannot delete a model with kind SCHEMA". It goes
+	// when the connection goes, so the only sensible destroy is to stop
+	// tracking it.
+	//
+	// Erroring here strands the resource. Terraform can never remove it from
+	// state, and a tainted one can never be replaced, because the destroy half
+	// of the replacement can never succeed.
+	if strings.EqualFold(state.ModelKind.ValueString(), "SCHEMA") {
+		resp.Diagnostics.AddWarning(
+			"Schema model removed from state, not from Omni",
+			"A schema model belongs to its connection and the API will not delete one on its "+
+				"own. It has been dropped from Terraform state and still exists in Omni, where "+
+				"it is removed with the connection.\n\n"+
+				"Model ID "+state.ID.ValueString()+", which is also the connection's ID.",
+		)
 		return
 	}
 
