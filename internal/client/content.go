@@ -202,6 +202,30 @@ func (c *Client) ListUserAttributes(ctx context.Context) ([]UserAttribute, error
 }
 
 // FindUserAttribute looks up a definition by its reference name.
+// FindUserAttributeByID looks a definition up by its ID rather than its name.
+//
+// An ID is the stable handle: a definition can be renamed in the UI, and a
+// configuration that refers to it by name silently stops matching. Referring by
+// ID means a rename is invisible to Terraform, which is what you want, and a
+// deletion fails loudly, which is also what you want.
+func (c *Client) FindUserAttributeByID(ctx context.Context, id string) (*UserAttribute, error) {
+	attrs, err := c.ListUserAttributes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range attrs {
+		if attrs[i].ID == id {
+			return &attrs[i], nil
+		}
+	}
+	return nil, &APIError{
+		StatusCode: http.StatusNotFound,
+		Method:     http.MethodGet,
+		Path:       "/v1/user-attributes",
+		Message:    fmt.Sprintf("no user attribute with ID %q. Definitions are created in the UI under Settings > User attributes; the API has no create endpoint", id),
+	}
+}
+
 func (c *Client) FindUserAttribute(ctx context.Context, name string) (*UserAttribute, error) {
 	attrs, err := c.ListUserAttributes(ctx)
 	if err != nil {

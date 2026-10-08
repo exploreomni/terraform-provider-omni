@@ -105,6 +105,50 @@ variable "users" {
   default = {}
 }
 
+variable "user_attributes" {
+  description = <<-DESC
+    User attribute definitions to reference, as a local key to the definition's
+    ID. Definitions are read-only in the API and created in the UI under
+    Settings > User attributes. List them with:
+
+      curl -s -H "Authorization: Bearer $OMNI_API_TOKEN" \
+        "$OMNI_BASE_URL/api/v1/user-attributes"
+
+    IDs rather than names, because a definition can be renamed and a
+    configuration naming it would stop matching in silence.
+  DESC
+
+  type    = map(string)
+  default = {}
+}
+
+variable "user_attribute_values" {
+  description = <<-DESC
+    Attribute values per person, as an email to a map of keys from
+    var.user_attributes to values.
+
+    Per person because Omni has no API for assigning values to a group: the
+    SCIM group resource carries no attribute extension and the only attribute
+    endpoint is a read.
+  DESC
+
+  type    = map(map(string))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for email in keys(var.user_attribute_values) : contains(keys(var.users), email)
+    ])
+    error_message = format(
+      "These attribute assignments name a user that is not in var.users: %s. Terraform can only set attributes on users it manages.",
+      join("; ", [
+        for email in keys(var.user_attribute_values) : email
+        if !contains(keys(var.users), email)
+      ])
+    )
+  }
+}
+
 variable "groups" {
   description = <<-DESC
     Internal groups, keyed by a stable name of your choosing. model and

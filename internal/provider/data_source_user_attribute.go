@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/datasourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	dschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -20,8 +21,9 @@ import (
 // ---------------------------------------------------------------------------
 
 var (
-	_ datasource.DataSource              = &userAttributeDataSource{}
-	_ datasource.DataSourceWithConfigure = &userAttributeDataSource{}
+	_ datasource.DataSource                     = &userAttributeDataSource{}
+	_ datasource.DataSourceWithConfigure        = &userAttributeDataSource{}
+	_ datasource.DataSourceWithConfigValidators = &userAttributeDataSource{}
 )
 
 // NewUserAttributeDataSource returns the omni_user_attribute data source.
@@ -55,10 +57,12 @@ func (d *userAttributeDataSource) Schema(_ context.Context, _ datasource.SchemaR
 			"nothing.",
 		Attributes: map[string]dschema.Attribute{
 			"name": dschema.StringAttribute{
-				Required:            true,
+				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "The attribute's **Reference** value, for example `tenant_id`.",
 			},
 			"id": dschema.StringAttribute{
+				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "The attribute's unique ID.",
 			},
@@ -96,6 +100,18 @@ func (d *userAttributeDataSource) Configure(_ context.Context, req datasource.Co
 	d.client = clientFromDataSourceRequest(req, resp)
 }
 
+// ConfigValidators requires exactly one of id or name. Both are Optional so
+// either can be used; without this, setting neither would read as a lookup for
+// the empty name and setting both would make the precedence a silent surprise.
+func (d *userAttributeDataSource) ConfigValidators(_ context.Context) []datasource.ConfigValidator {
+	return []datasource.ConfigValidator{
+		datasourcevalidator.ExactlyOneOf(
+			pathExpr("id"),
+			pathExpr("name"),
+		),
+	}
+}
+
 func (d *userAttributeDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var config userAttributeDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
@@ -103,7 +119,18 @@ func (d *userAttributeDataSource) Read(ctx context.Context, req datasource.ReadR
 		return
 	}
 
-	attr, err := d.client.FindUserAttribute(ctx, config.Name.ValueString())
+	// Prefer the ID. It is the stable handle: a definition can be renamed in the
+	// UI, and a configuration that refers to it by name quietly stops matching,
+	// which on an access filter means row-level security that no longer applies.
+	var (
+		attr *client.UserAttribute
+		err  error
+	)
+	if !config.ID.IsNull() && config.ID.ValueString() != "" {
+		attr, err = d.client.FindUserAttributeByID(ctx, config.ID.ValueString())
+	} else {
+		attr, err = d.client.FindUserAttribute(ctx, config.Name.ValueString())
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to look up Omni user attribute", err.Error())
 		return
