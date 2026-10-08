@@ -90,6 +90,17 @@ module "schema_refresh" {
   }
 }
 
+# User attribute values. Definitions are read-only in the API and made in the
+# UI; this resolves them by ID and turns the values into the shape the access
+# module wants. Values are per person: Omni has no API for assigning them to a
+# group.
+module "user_attributes" {
+  source = "../modules/user-attributes"
+
+  attributes  = var.user_attributes
+  assignments = var.user_attribute_values
+}
+
 # --------------------------------------------------------------------------
 # Internal: people who build content. Leave users, groups and folders empty on
 # an instance used only for embedding.
@@ -100,7 +111,16 @@ module "access" {
 
   depends_on = [module.modeling]
 
-  users = var.users
+  users = {
+    for email, u in var.users : email => merge(u, {
+      # Attributes set directly on the user win over the ones resolved from
+      # var.user_attribute_values, so a one-off override needs no module change.
+      attributes = merge(
+        try(module.user_attributes.values_by_user[email], {}),
+        coalesce(u.attributes, {}),
+      )
+    })
+  }
 
   groups = {
     for k, v in var.groups : k => {
@@ -129,9 +149,14 @@ module "access" {
 
 # The attribute tenant scoping keys off. Looked up rather than created:
 # definitions cannot be made through the API. Only read when something uses it.
+#
+# By ID when one is given, by name otherwise. The data source accepts exactly
+# one of the two, so the unused one is nulled rather than left at its default.
 data "omni_user_attribute" "tenant" {
   count = length(var.tenant_groups) > 0 ? 1 : 0
-  name  = var.tenant_attribute
+
+  id   = var.tenant_attribute_id
+  name = var.tenant_attribute_id == null ? var.tenant_attribute : null
 }
 
 # Who the session is. The "groups" claim in a signed URL resolves to these.
