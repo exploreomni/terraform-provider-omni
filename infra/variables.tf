@@ -39,7 +39,7 @@ variable "models" {
     var.connections.
 
     The key is the model's identity and is what var.groups and
-    var.tenant_groups reference. Set name to rename a model without re-keying:
+    var.groups reference. Set name to rename a model without re-keying:
     Omni renames in place, while changing the key destroys the model, discards
     its content and breaks everything pointing at the old key.
 
@@ -168,7 +168,23 @@ variable "groups" {
     # re-keying it, which would replace it instead.
     display_name = optional(string)
 
-    members    = optional(list(string), [])
+    # Prepended to the key when display_name is unset, so a family of groups
+    # stays recognisable without the prefix appearing in every key. Embed
+    # groups conventionally use "tenant-".
+    name_prefix = optional(string)
+
+    members = optional(list(string), [])
+
+    # Whether Terraform owns the membership list.
+    #
+    # true, the default: members above are authoritative and anyone added
+    # outside Terraform is removed on the next apply. Right for internal groups.
+    #
+    # false: Omni keeps whatever membership it has. Required for an embed group,
+    # whose sessions create their own users - an authoritative list would delete
+    # them on the next apply.
+    manage_members = optional(bool, true)
+
     model      = optional(string)
     connection = optional(string)
     model_role = optional(string, "QUERIER")
@@ -176,8 +192,24 @@ variable "groups" {
     # A role on the whole connection rather than one model, usually
     # CONNECTION_ADMIN. Requires connection and ignores model.
     connection_role = optional(string)
+
+    # Optional palette for this group, picked up by the branding module.
+    colors = optional(list(string))
   }))
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.groups : length(v.members) == 0 if !v.manage_members
+    ])
+    error_message = format(
+      "These groups list members but set manage_members = false: %s. The two contradict each other: with manage_members false Terraform does not own the membership list and the members would be ignored. Drop the members, or let Terraform manage them.",
+      join("; ", [
+        for k, v in var.groups : "group \"${k}\""
+        if !v.manage_members && length(v.members) > 0
+      ])
+    )
+  }
 
   validation {
     condition     = alltrue([for k, v in var.groups : v.model == null || v.connection != null])
@@ -300,70 +332,6 @@ variable "tenant_attribute" {
 
   type    = string
   default = "tenant_id"
-}
-
-variable "tenant_group_prefix" {
-  description = "Prefix for tenant group names."
-  type        = string
-  default     = "tenant-"
-}
-
-variable "tenant_groups" {
-  description = <<-DESC
-    Tenant groups, keyed by tenant. The key plus the prefix is the name a
-    signed URL passes in "groups".
-
-    Set model and connection to also grant a role on a model. Omit them and
-    only the group is created.
-  DESC
-
-  type = map(object({
-    # Overrides the generated prefix + key. Set this to rename a tenant group
-    # without re-keying it, which would replace it.
-    display_name = optional(string)
-
-    model      = optional(string)
-    connection = optional(string)
-    model_role = optional(string, "QUERY_TOPICS")
-
-    # Optional per-tenant palette, picked up by the branding module.
-    colors = optional(list(string))
-  }))
-
-  default = {}
-
-  validation {
-    condition     = alltrue([for k, v in var.tenant_groups : v.model == null || v.connection != null])
-    error_message = "A tenant group with a model also needs a connection: a model role is scoped to both."
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.tenant_groups :
-      v.connection == null || contains(keys(var.connections), coalesce(v.connection, "__unset__"))
-    ])
-    error_message = format(
-      "These tenant groups reference a connection that is not in var.connections: %s. Remove the reference or restore the connection.",
-      join("; ", [
-        for k, v in var.tenant_groups : "tenant \"${k}\" needs connection \"${v.connection}\""
-        if v.connection != null && !contains(keys(var.connections), coalesce(v.connection, "__unset__"))
-      ])
-    )
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.tenant_groups :
-      v.model == null || contains(keys(var.models), coalesce(v.model, "__unset__"))
-    ])
-    error_message = format(
-      "These tenant groups hold a role on a model that is not in var.models: %s. A model cannot be removed or re-keyed while a tenant references it. Rename with the name attribute instead of re-keying, or update the reference in the same change.",
-      join("; ", [
-        for k, v in var.tenant_groups : "tenant \"${k}\" needs model \"${v.model}\""
-        if v.model != null && !contains(keys(var.models), coalesce(v.model, "__unset__"))
-      ])
-    )
-  }
 }
 
 variable "tenant_base_connection" {
@@ -521,16 +489,14 @@ variable "managed_folders" {
 variable "content_grants" {
   description = <<-DESC
     Who can see which folder. folder is a key from existing_folders or
-    managed_folders; tenant_groups and internal_groups are keys from
-    var.tenant_groups and var.groups.
+    managed_folders; groups are keys from var.groups.
   DESC
 
   type = map(object({
-    folder          = string
-    role            = optional(string, "VIEWER")
-    tenant_groups   = optional(list(string), [])
-    internal_groups = optional(list(string), [])
-    user_ids        = optional(list(string))
+    folder   = string
+    role     = optional(string, "VIEWER")
+    groups   = optional(list(string), [])
+    user_ids = optional(list(string))
   }))
 
   default = {}
@@ -541,13 +507,13 @@ variable "content_grants" {
     # message can name the grant.
     condition = alltrue([
       for k, v in var.content_grants :
-      length(v.tenant_groups) + length(v.internal_groups) + length(coalesce(v.user_ids, [])) > 0
+      length(v.groups) + length(coalesce(v.user_ids, [])) > 0
     ])
     error_message = format(
-      "These content grants name no groups and no users: %s. A grant needs at least one of tenant_groups, internal_groups or user_ids. Remove the grant rather than leaving it empty.",
+      "These content grants name no groups and no users: %s. A grant needs at least one of groups or user_ids. Remove the grant rather than leaving it empty.",
       join("; ", [
         for k, v in var.content_grants : "grant \"${k}\" on folder \"${v.folder}\""
-        if length(v.tenant_groups) + length(v.internal_groups) + length(coalesce(v.user_ids, [])) == 0
+        if length(v.groups) + length(coalesce(v.user_ids, [])) == 0
       ])
     )
   }
@@ -569,31 +535,14 @@ variable "content_grants" {
   validation {
     condition = alltrue(flatten([
       for k, v in var.content_grants : [
-        for g in v.tenant_groups : contains(keys(var.tenant_groups), g)
+        for g in v.groups : contains(keys(var.groups), g)
       ]
     ]))
     error_message = format(
-      "These content grants name a tenant group that is not in var.tenant_groups: %s. A tenant group cannot be removed while a grant names it. Drop it from the grant in the same change.",
+      "These content grants name a group that is not in var.groups: %s. A group cannot be removed while a grant names it. Drop it from the grant in the same change.",
       join("; ", flatten([
         for k, v in var.content_grants : [
-          for g in v.tenant_groups : "grant \"${k}\" names tenant group \"${g}\""
-          if !contains(keys(var.tenant_groups), g)
-        ]
-      ]))
-    )
-  }
-
-  validation {
-    condition = alltrue(flatten([
-      for k, v in var.content_grants : [
-        for g in v.internal_groups : contains(keys(var.groups), g)
-      ]
-    ]))
-    error_message = format(
-      "These content grants name an internal group that is not in var.groups: %s. Drop it from the grant in the same change.",
-      join("; ", flatten([
-        for k, v in var.content_grants : [
-          for g in v.internal_groups : "grant \"${k}\" names internal group \"${g}\""
+          for g in v.groups : "grant \"${k}\" names group \"${g}\""
           if !contains(keys(var.groups), g)
         ]
       ]))

@@ -59,10 +59,12 @@ module "branding" {
   # No depends_on. Palettes and labels reference nothing else, so this layer
   # runs first and in parallel with the warehouse rather than waiting on it.
 
+  # A group may carry its own palette. Prefixed so a group key cannot collide
+  # with a key in var.palettes.
   palettes = merge(
     var.palettes,
     {
-      for k, v in var.tenant_groups : "tenant-${k}" => {
+      for k, v in var.groups : "group-${k}" => {
         type   = "discrete"
         colors = v.colors
       } if v.colors != null
@@ -125,7 +127,9 @@ module "access" {
   groups = {
     for k, v in var.groups : k => {
       display_name    = v.display_name
+      name_prefix     = v.name_prefix
       members         = v.members
+      manage_members  = v.manage_members
       model_role      = v.model_role
       connection_role = v.connection_role
 
@@ -148,35 +152,21 @@ module "access" {
 # --------------------------------------------------------------------------
 
 # The attribute tenant scoping keys off. Looked up rather than created:
-# definitions cannot be made through the API. Only read when something uses it.
+# definitions cannot be made through the API.
+#
+# Nothing consumes this. It is an existence check: embed scoping silently
+# filters nothing if the attribute is missing, and a failed data source read at
+# plan time is a much better way to find that out than an empty dashboard. Read
+# only when embed is actually in use, which is either a group whose membership
+# the sessions own or a routed tenant.
 #
 # By ID when one is given, by name otherwise. The data source accepts exactly
 # one of the two, so the unused one is nulled rather than left at its default.
 data "omni_user_attribute" "tenant" {
-  count = length(var.tenant_groups) > 0 ? 1 : 0
+  count = length([for k, v in var.groups : k if !v.manage_members]) > 0 || length(var.tenant_routing) > 0 ? 1 : 0
 
   id   = var.tenant_attribute_id
   name = var.tenant_attribute_id == null ? var.tenant_attribute : null
-}
-
-# Who the session is. The "groups" claim in a signed URL resolves to these.
-module "embed_groups" {
-  source = "../modules/embed-groups"
-
-  depends_on = [module.modeling]
-
-  prefix = var.tenant_group_prefix
-
-  tenants = {
-    for k, v in var.tenant_groups : k => {
-      display_name     = v.display_name
-      grant_model_role = v.model != null
-
-      model_id      = v.model == null ? null : module.modeling.model_ids[v.model]
-      connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
-      model_role    = v.model_role
-    }
-  }
 }
 
 # Where its queries run. Empty unless a tenant needs its own database or
@@ -201,23 +191,20 @@ module "embed_routing" {
 module "content_access" {
   source = "../modules/content-access"
 
-  # Grants name groups, so both group layers must exist first. The group_ids
-  # lookups below imply this only while content_grants is non-empty; stated
+  # Grants name groups, so the group layer must exist first. The group_ids
+  # lookup below implies this only while content_grants is non-empty; stated
   # here it holds even when it is empty.
-  depends_on = [module.embed_groups, module.access]
+  depends_on = [module.access]
 
   existing_folders = var.existing_folders
   managed_folders  = var.managed_folders
 
   grants = {
     for k, v in var.content_grants : k => {
-      folder = v.folder
-      role   = v.role
-      group_ids = concat(
-        [for g in v.tenant_groups : module.embed_groups.group_ids[g]],
-        [for g in v.internal_groups : module.access.group_ids[g]],
-      )
-      user_ids = v.user_ids
+      folder    = v.folder
+      role      = v.role
+      group_ids = [for g in v.groups : module.access.group_ids[g]]
+      user_ids  = v.user_ids
     }
   }
 }

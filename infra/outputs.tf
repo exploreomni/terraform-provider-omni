@@ -22,17 +22,24 @@ output "internal" {
 
 output "tenants" {
   description = <<-DESC
-    What a signed URL needs for each tenant. content_path is deliberately not
-    here: content usually lives in a shared hub folder rather than one folder
-    per tenant, so the path depends on what you are linking to.
+    What a signed URL needs for each tenant: the groups whose membership the
+    sessions own, which is what manage_members = false means.
+
+    group is the name to pass in the "groups" claim. These are non-entity
+    groups; an entity group is created by the session's own entity parameter
+    and is not managed here.
+
+    content_path is deliberately absent: content usually lives in a shared hub
+    folder rather than one folder per tenant, so the path depends on what you
+    are linking to.
   DESC
 
   value = {
-    for k, name in module.embed_groups.group_names : k => {
-      group                = name
+    for k, v in var.groups : k => {
+      group                = coalesce(v.display_name, "${coalesce(v.name_prefix, "")}${k}")
       user_attribute_value = k
       routed               = contains(module.embed_routing.routed_tenants, k)
-    }
+    } if !v.manage_members
   }
 }
 

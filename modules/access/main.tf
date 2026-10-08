@@ -23,14 +23,21 @@ resource "omni_user" "this" {
 resource "omni_user_group" "this" {
   for_each = var.groups
 
-  # Same reasoning as the tenant groups: the key is the identity, display_name
-  # is the label. Omni renames in place, so a label change should not have to
-  # become a replacement.
-  display_name = coalesce(each.value.display_name, each.key)
+  # The key is the identity, display_name is the label. Omni renames in place,
+  # so a label change should not have to become a replacement. name_prefix
+  # keeps a family of groups recognisable without burying the prefix in keys.
+  display_name = coalesce(
+    each.value.display_name,
+    "${coalesce(each.value.name_prefix, "")}${each.key}",
+  )
 
-  # Authoritative: a user removed from this list loses the group on the next
-  # apply. Manage a group entirely here or not at all.
-  member_ids = [for email in each.value.members : omni_user.this[email].id]
+  # null, not an empty list, when membership is unmanaged. The provider reads
+  # that as "do not track membership", and an empty list would mean "this group
+  # has no members" - which on an embed group deletes every user its sessions
+  # created.
+  member_ids = each.value.manage_members ? [
+    for email in each.value.members : omni_user.this[email].id
+  ] : null
 }
 
 # A role on one model.
