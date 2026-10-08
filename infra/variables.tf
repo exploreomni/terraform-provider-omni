@@ -224,10 +224,34 @@ variable "folders" {
 # Embed. Three independent maps. Configure only what a deployment needs.
 # --------------------------------------------------------------------------
 
+variable "tenant_attribute_id" {
+  description = <<-DESC
+    ID of the user attribute that scopes tenants. Preferred over
+    tenant_attribute below, for the same reason every other reference in this
+    configuration moved to IDs: a definition can be renamed in the UI, and a
+    name that no longer matches resolves to nothing while remaining a valid
+    configuration. On an attribute driving an access filter that is row-level
+    security quietly ceasing to apply, with nothing failing to say so.
+
+    Read it from GET /v1/user-attributes. Definitions are made in the UI; the
+    API has no create endpoint. Set this and tenant_attribute is ignored.
+  DESC
+
+  type    = string
+  default = null
+}
+
 variable "tenant_attribute" {
-  description = "Reference of the user attribute that scopes tenants. Must already exist."
-  type        = string
-  default     = "tenant_id"
+  description = <<-DESC
+    Name of the user attribute that scopes tenants. Must already exist.
+
+    Kept for configurations that predate tenant_attribute_id and as a
+    convenience when the ID is not to hand. Prefer the ID: a rename breaks this
+    silently.
+  DESC
+
+  type    = string
+  default = "tenant_id"
 }
 
 variable "tenant_group_prefix" {

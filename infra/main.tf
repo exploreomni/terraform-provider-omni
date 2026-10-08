@@ -129,9 +129,14 @@ module "access" {
 
 # The attribute tenant scoping keys off. Looked up rather than created:
 # definitions cannot be made through the API. Only read when something uses it.
+#
+# By ID when one is given, by name otherwise. The data source accepts exactly
+# one of the two, so the unused one is nulled rather than left at its default.
 data "omni_user_attribute" "tenant" {
   count = length(var.tenant_groups) > 0 ? 1 : 0
-  name  = var.tenant_attribute
+
+  id   = var.tenant_attribute_id
+  name = var.tenant_attribute_id == null ? var.tenant_attribute : null
 }
 
 # Who the session is. The "groups" claim in a signed URL resolves to these.
