@@ -10,8 +10,5 @@
 # create. Nothing needs changing in between.
 
 models = {
-  "embed-test" = {
-    kind       = "SHARED"
-    connection = "embed-base"
-  }
+
 }
