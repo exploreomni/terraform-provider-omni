@@ -16,8 +16,4 @@ managed_folders = {
 # Who can see what. Several tenants on one grant is normal: shared content is
 # shared.
 content_grants = {
-  "hub-for-tenants" = {
-    folder = "hub"
-    role   = "VIEWER"
-  }
 }
