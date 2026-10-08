@@ -374,6 +374,76 @@ variable "managed_folders" {
     delete_recursively = optional(bool, false)
   }))
   default = {}
+
+  # Checked here as well as in the module so the message can name the folder
+  # before the plan reaches the module at all.
+  #
+  # Every check resolves coalesce(v.parent, k), never v.parent directly:
+  # Terraform's || does not short-circuit, so "v.parent == null || f(v.parent)"
+  # still calls f with null and fails on the argument instead of reporting the
+  # condition.
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      contains(keys(var.managed_folders), coalesce(v.parent, k))
+    ])
+    error_message = format(
+      "These folders name a parent that is not another key in managed_folders: %s.",
+      join("; ", [
+        for k, v in var.managed_folders : "folder \"${k}\" names parent \"${v.parent}\""
+        if v.parent != null && !contains(keys(var.managed_folders), coalesce(v.parent, "__unset__"))
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      try(var.managed_folders[coalesce(v.parent, k)].parent, null) == null
+    ])
+    error_message = "managed_folders supports one level of nesting: a parent cannot itself have a parent."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      v.parent != null || v.scope != null
+    ])
+    error_message = format(
+      "These top-level folders do not state a scope: %s. Set organization or restricted. Left unset, the provider silently chooses organization, which is a decision about who can reach the folder before any grant applies.",
+      join("; ", [for k, v in var.managed_folders : "folder \"${k}\"" if v.parent == null && v.scope == null])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
+    ])
+    error_message = "scope must be organization or restricted."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      v.parent == null || v.scope == null
+    ])
+    error_message = "A nested folder inherits its parent's scope and must not set scope itself."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
+    ])
+    error_message = format(
+      "These restricted folders have no owner_id: %s. A restricted folder needs an owner when the provider uses an organization API key.",
+      join("; ", [
+        for k, v in var.managed_folders : "folder \"${k}\""
+        if coalesce(v.scope, "organization") == "restricted" && v.owner_id == null
+      ])
+    )
+  }
 }
 
 variable "content_grants" {
@@ -392,6 +462,23 @@ variable "content_grants" {
   }))
 
   default = {}
+
+  validation {
+    # A grant with no subjects reaches the API as an empty list and comes back
+    # as "userIds or userGroupIds must be provided". Catch it here, where the
+    # message can name the grant.
+    condition = alltrue([
+      for k, v in var.content_grants :
+      length(v.tenant_groups) + length(v.internal_groups) + length(coalesce(v.user_ids, [])) > 0
+    ])
+    error_message = format(
+      "These content grants name no groups and no users: %s. A grant needs at least one of tenant_groups, internal_groups or user_ids. Remove the grant rather than leaving it empty.",
+      join("; ", [
+        for k, v in var.content_grants : "grant \"${k}\" on folder \"${v.folder}\""
+        if length(v.tenant_groups) + length(v.internal_groups) + length(coalesce(v.user_ids, [])) == 0
+      ])
+    )
+  }
 
   validation {
     condition = alltrue([

@@ -15,7 +15,11 @@ terraform {
 resource "omni_user_group" "tenant" {
   for_each = var.tenants
 
-  display_name = "${var.prefix}${each.key}"
+  # The key is the tenant's identity and never changes; display_name is the
+  # label and can. Omni renames a group in place, while changing the key moves
+  # the resource address, so Terraform destroys and recreates it and the
+  # group's embed membership goes with it.
+  display_name = coalesce(each.value.display_name, "${var.prefix}${each.key}")
 
   # Deliberately no member_ids. Embed sessions create their own users, and
   # membership here is authoritative, so Terraform would remove whoever the

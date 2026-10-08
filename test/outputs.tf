@@ -1,14 +1,14 @@
 output "ids" {
   description = "Every resource ID this suite created."
   value = {
-    folder_parent        = omni_folder.parent.id
-    folder_child         = omni_folder.child.id
-    user                 = omni_user.test.id
-    user_group           = omni_user_group.test.id
-    model                = omni_model.extension.id
-    user_model_role      = omni_user_model_role.test.id
-    group_model_role     = omni_user_group_model_role.test.id
-    connection           = try(omni_connection.test[0].id, null)
+    folder_parent    = omni_folder.parent.id
+    folder_child     = omni_folder.child.id
+    user             = omni_user.test.id
+    user_group       = omni_user_group.test.id
+    model            = omni_model.extension.id
+    user_model_role  = omni_user_model_role.test.id
+    group_model_role = omni_user_group_model_role.test.id
+    connection       = try(omni_connection.test[0].id, null)
   }
 }
 
@@ -27,11 +27,11 @@ output "computed" {
 output "data_sources" {
   description = "Data source lookups, to confirm they resolve to the same objects."
   value = {
-    connection_id     = data.omni_connection.existing.id
-    base_model_id     = data.omni_model.base.id
-    user_by_email_id  = data.omni_user.by_email.id
-    group_by_name_id  = data.omni_user_group.by_name.id
-    user_ids_match    = data.omni_user.by_email.id == omni_user.test.id
-    group_ids_match   = data.omni_user_group.by_name.id == omni_user_group.test.id
+    connection_id    = data.omni_connection.existing.id
+    base_model_id    = data.omni_model.base.id
+    user_by_email_id = data.omni_user.by_email.id
+    group_by_name_id = data.omni_user_group.by_name.id
+    user_ids_match   = data.omni_user.by_email.id == omni_user.test.id
+    group_ids_match  = data.omni_user_group.by_name.id == omni_user_group.test.id
   }
 }

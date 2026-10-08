@@ -35,6 +35,15 @@ variable "connections" {
     external_oauth_authorization_url = optional(string)
     external_oauth_token_url         = optional(string)
 
+    # A schema refresh schedule.
+    #
+    # Requires the connection's schema model to exist first. Until it does,
+    # POST /v1/connections/{id}/schedules answers "Connection with id ... does
+    # not exist", even though GET and PATCH on the connection return 200. So a
+    # 404 here means "no schema model yet", not "no connection".
+    #
+    # Create the schema model with a kind = "SCHEMA" entry in var.models, which
+    # is the API equivalent of the UI's "Build Schema" button.
     refresh_schedule = optional(object({
       cron         = string
       timezone     = string

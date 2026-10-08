@@ -23,7 +23,10 @@ resource "omni_user" "this" {
 resource "omni_user_group" "this" {
   for_each = var.groups
 
-  display_name = each.key
+  # Same reasoning as the tenant groups: the key is the identity, display_name
+  # is the label. Omni renames in place, so a label change should not have to
+  # become a replacement.
+  display_name = coalesce(each.value.display_name, each.key)
 
   # Authoritative: a user removed from this list loses the group on the next
   # apply. Manage a group entirely here or not at all.
@@ -64,9 +67,15 @@ resource "omni_user_group_model_role" "connection" {
 resource "omni_folder" "this" {
   for_each = var.folders
 
-  name  = each.value.name
-  path  = each.key
-  scope = each.value.scope
+  name = each.value.name
+  path = each.key
+
+  # Stated rather than defaulted, the same as in the content-access module.
+  # Scope decides who can reach the folder before the grant below applies, and
+  # on an internal instance that is the difference between org-wide shared
+  # content and a folder only its group can open.
+  scope    = each.value.scope
+  owner_id = each.value.owner_id
 }
 
 resource "omni_folder_permission" "this" {

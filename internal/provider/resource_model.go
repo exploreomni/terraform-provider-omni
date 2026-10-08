@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -37,6 +38,7 @@ type modelResourceModel struct {
 	BaseModelID          types.String `tfsdk:"base_model_id"`
 	AllowAsWorkbookBase  types.Bool   `tfsdk:"allow_as_workbook_base"`
 	UsesIsolatedBranches types.Bool   `tfsdk:"uses_isolated_branches"`
+	RefreshOnCreate      types.Bool   `tfsdk:"refresh_on_create"`
 	CreatedAt            types.String `tfsdk:"created_at"`
 	UpdatedAt            types.String `tfsdk:"updated_at"`
 }
@@ -95,6 +97,18 @@ func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				MarkdownDescription: "Whether workbooks may be built on this model. Set at creation only.",
 				PlanModifiers:       []planmodifier.Bool{boolplanmodifier.RequiresReplace()},
 			},
+			"refresh_on_create": schema.BoolAttribute{
+				Optional: true,
+				MarkdownDescription: "Start a schema refresh once the model is created. " +
+					"Defaults to `true` for a `SCHEMA` model and `false` otherwise.\n\n" +
+					"Creating a `SCHEMA` model registers it; introspecting the warehouse is a " +
+					"separate call, and the UI's \"Build Schema\" button does both. Without the " +
+					"refresh the model exists but has no tables, so anything built on it sees " +
+					"nothing.\n\n" +
+					"This only applies at create time: changing it later has no effect, and a " +
+					"failed refresh is reported as a warning rather than failing the apply, " +
+					"since the model itself was created.",
+			},
 			"uses_isolated_branches": schema.BoolAttribute{
 				Optional: true,
 				MarkdownDescription: "For `SHARED_EXTENSION` models, show branches on the extension model page " +
@@ -149,6 +163,32 @@ func (r *modelResource) Create(ctx context.Context, req resource.CreateRequest, 
 	state := plan
 	applyModelToState(&state, created)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+
+	// After the state is written, so a refresh failure cannot cost us the ID of
+	// a model that already exists.
+	if refreshOnCreate(plan) {
+		if err := r.client.RefreshModel(ctx, created.ID); err != nil {
+			resp.Diagnostics.AddWarning(
+				"Model created but the schema refresh could not be started",
+				"The model exists and is in state. Its schema has not been introspected, so it "+
+					"has no tables yet and anything built on it will see nothing.\n\n"+
+					"Start one by hand:\n\n"+
+					"  curl -X POST -H \"Authorization: Bearer $OMNI_API_TOKEN\" \\\n"+
+					"    \"$OMNI_BASE_URL/api/v1/models/"+created.ID+"/refresh\"\n\n"+
+					"The error was: "+err.Error(),
+			)
+		}
+	}
+}
+
+// refreshOnCreate decides whether to start a schema refresh after creating a
+// model. An explicit setting wins; otherwise only SCHEMA models refresh, since
+// they are the ones that are useless without it.
+func refreshOnCreate(plan modelResourceModel) bool {
+	if !plan.RefreshOnCreate.IsNull() && !plan.RefreshOnCreate.IsUnknown() {
+		return plan.RefreshOnCreate.ValueBool()
+	}
+	return strings.EqualFold(plan.ModelKind.ValueString(), "SCHEMA")
 }
 
 func (r *modelResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {

@@ -13,6 +13,10 @@ variable "tenants" {
   DESC
 
   type = map(object({
+    # Overrides the generated prefix + key. Set this to rename a group without
+    # re-keying it, which would replace it instead.
+    display_name = optional(string)
+
     grant_model_role = optional(bool, false)
     model_id         = optional(string)
     connection_id    = optional(string)

@@ -40,8 +40,15 @@ data "omni_folder" "existing" {
 resource "omni_folder" "managed" {
   for_each = { for k, v in var.managed_folders : k => v if v.parent == null }
 
-  name               = each.value.name
-  path               = each.key
+  name = each.value.name
+  path = each.key
+
+  # Stated rather than defaulted. The provider falls back to "organization",
+  # which on an embed instance is a decision about who can reach the folder
+  # before any grant is applied, so it should be written down.
+  scope    = each.value.scope
+  owner_id = each.value.owner_id
+
   delete_recursively = each.value.delete_recursively
 }
 
