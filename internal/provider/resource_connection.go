@@ -524,8 +524,37 @@ func applyConnectionToState(state *connectionResourceModel, connection *client.C
 	if connection.Database != "" {
 		state.Database = types.StringValue(connection.Database)
 	}
-	state.BaseRole = stringOrNull(connection.BaseRole)
-	state.DefaultSchema = stringOrNull(connection.DefaultSchema)
+	// base_role and default_schema are Optional+Computed, and the connection
+	// read does not return every field the create accepted. defaultSchema in
+	// particular comes back absent, and writing that null over a configured
+	// value produces "Provider produced inconsistent result after apply".
+	//
+	// Findings 3 and 4 again: a response is partial, so an absent field must
+	// never overwrite a value we already know. Keep what the plan carried, and
+	// resolve to null only when the plan left it unknown, which it does when the
+	// attribute was not configured at all.
+	state.BaseRole = keepKnown(state.BaseRole, connection.BaseRole)
+	state.DefaultSchema = keepKnown(state.DefaultSchema, connection.DefaultSchema)
+
 	state.CreatedAt = stringOrNull(connection.CreatedAt)
 	state.UpdatedAt = stringOrNull(connection.UpdatedAt)
+}
+
+// keepKnown resolves an Optional+Computed attribute against a partial API
+// response.
+//
+//	api non-empty      the API has an opinion, take it
+//	api empty, known   the field was absent from the response, keep what we have
+//	api empty, unknown nothing configured and nothing returned, so it is null
+//
+// Returning the current value for the middle case is what stops an absent
+// field from being read as a deliberate clear.
+func keepKnown(current types.String, apiValue string) types.String {
+	if apiValue != "" {
+		return types.StringValue(apiValue)
+	}
+	if current.IsUnknown() {
+		return types.StringNull()
+	}
+	return current
 }
