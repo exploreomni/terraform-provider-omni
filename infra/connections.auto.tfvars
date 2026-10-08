@@ -1,5 +1,8 @@
 # Connections. A change here is a credential or warehouse change.
 #
+# File renamed from warehouse.auto.tfvars: the variable is connections, and a
+# file should be findable from the variable someone is looking for.
+#
 # Secrets come from connection_passwords and friends, passed from a secret
 # store or TF_VAR_ in CI, never from this file.
 

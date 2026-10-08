@@ -1,7 +1,12 @@
 # Palettes and labels. "verified" is one of Omni's built-in labels, so
 # creating it returns 409; "reviewed" is used instead.
 
-palettes = {}
+palettes = {
+  "brand" = {
+    type   = "discrete"
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+  }
+}
 
 labels = {
   "reviewed" = {

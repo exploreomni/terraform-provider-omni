@@ -12,11 +12,10 @@ output "models" {
 }
 
 output "internal" {
-  description = "Internal users, groups and folders. Empty on an embed-only instance."
+  description = "Users and groups. Folders are under content, wherever they came from."
   value = {
-    users   = module.access.user_ids
-    groups  = module.access.group_ids
-    folders = module.access.folder_ids
+    users  = module.access.user_ids
+    groups = module.access.group_ids
   }
 }
 
@@ -46,8 +45,9 @@ output "tenants" {
 output "content" {
   description = "Folders in play, looked up and created, and who was granted what."
   value = {
-    folders = module.content_access.folder_ids
-    grants  = module.content_access.grant_ids
+    folders         = module.content_access.folder_ids
+    grants          = module.content_access.grant_ids
+    document_grants = module.content_access.document_grant_ids
   }
 }
 

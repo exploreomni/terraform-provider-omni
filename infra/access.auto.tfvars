@@ -32,5 +32,3 @@ groups = {
     connection_role = "CONNECTION_ADMIN"
   }
 }
-
-folders = {}

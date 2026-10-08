@@ -49,36 +49,3 @@ variable "groups" {
   }))
   default = {}
 }
-
-variable "folders" {
-  description = "Internal folders, keyed by path."
-  type = map(object({
-    name     = string
-    scope    = optional(string)
-    owner_id = optional(string)
-    groups   = optional(list(string), [])
-    role     = optional(string, "EDITOR")
-  }))
-  default = {}
-
-  validation {
-    condition     = alltrue([for k, v in var.folders : v.scope != null])
-    error_message = "Every folder must state a scope: organization or restricted. Left unset, the provider silently chooses organization, which is a decision about who can reach the folder."
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.folders :
-      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
-    ])
-    error_message = "scope must be organization or restricted."
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.folders :
-      coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
-    ])
-    error_message = "A restricted folder needs owner_id when the provider uses an organization API key."
-  }
-}
