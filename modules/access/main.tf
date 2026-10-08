@@ -26,10 +26,7 @@ resource "omni_user_group" "this" {
   # The key is the identity, display_name is the label. Omni renames in place,
   # so a label change should not have to become a replacement. name_prefix
   # keeps a family of groups recognisable without burying the prefix in keys.
-  display_name = coalesce(
-    each.value.display_name,
-    "${coalesce(each.value.name_prefix, "")}${each.key}",
-  )
+  display_name = coalesce(each.value.display_name, "${each.value.name_prefix}${each.key}")
 
   # null, not an empty list, when membership is unmanaged. The provider reads
   # that as "do not track membership", and an empty list would mean "this group

@@ -171,7 +171,10 @@ variable "groups" {
     # Prepended to the key when display_name is unset, so a family of groups
     # stays recognisable without the prefix appearing in every key. Embed
     # groups conventionally use "tenant-".
-    name_prefix = optional(string)
+    #
+    # Defaults to "" rather than null: this gets interpolated, and coalesce
+    # rejects empty strings as well as nulls, so a null would fail the call.
+    name_prefix = optional(string, "")
 
     members = optional(list(string), [])
 

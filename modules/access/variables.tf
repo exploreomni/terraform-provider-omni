@@ -16,7 +16,11 @@ variable "groups" {
 
     # Prepended to the key when display_name is unset. Keeps a family of groups
     # recognisable without putting the prefix in every key.
-    name_prefix = optional(string)
+    #
+    # Defaults to "" rather than null deliberately: the display_name expression
+    # interpolates this, and coalesce rejects empty strings as well as nulls, so
+    # a null here would make coalesce(name_prefix, "") fail outright.
+    name_prefix = optional(string, "")
 
     members = optional(list(string), [])
 

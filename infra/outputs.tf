@@ -36,7 +36,7 @@ output "tenants" {
 
   value = {
     for k, v in var.groups : k => {
-      group                = coalesce(v.display_name, "${coalesce(v.name_prefix, "")}${k}")
+      group                = coalesce(v.display_name, "${v.name_prefix}${k}")
       user_attribute_value = k
       routed               = contains(module.embed_routing.routed_tenants, k)
     } if !v.manage_members
