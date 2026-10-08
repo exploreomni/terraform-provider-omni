@@ -19,6 +19,6 @@ content_grants = {
   "hub-for-tenants" = {
     folder        = "hub"
     role          = "VIEWER"
-    tenant_groups = ["acme", "globex"]
+
   }
 }
