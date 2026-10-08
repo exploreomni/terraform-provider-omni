@@ -6,4 +6,9 @@ models = {
     kind       = "SCHEMA"
     connection = "embed-base"
   }
+
+  "embed-test" = {
+    kind       = "SHARED"
+    connection = "embed-base"
+  }
 }
