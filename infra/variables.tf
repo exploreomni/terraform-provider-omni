@@ -34,9 +34,38 @@ variable "connection_oauth_secrets" {
 # --------------------------------------------------------------------------
 
 variable "models" {
-  description = "Models to create, keyed by name. connection is a key from var.connections."
-  type        = any
-  default     = {}
+  description = <<-DESC
+    Models to create, keyed by a stable identifier. connection is a key from
+    var.connections.
+
+    The key is the model's identity and is what var.groups and
+    var.tenant_groups reference. Set name to rename a model without re-keying:
+    Omni renames in place, while changing the key destroys the model, discards
+    its content and breaks everything pointing at the old key.
+
+    kind, connection and base model all force replacement.
+  DESC
+
+  type    = any
+  default = {}
+
+  # Without this, removing a connection while a model still names it fails with
+  # "Invalid index ... object with no attributes", which says nothing about
+  # which model or which key. Destroying a connection means destroying what is
+  # built on it, and this says so.
+  validation {
+    condition = alltrue([
+      for k, v in var.models :
+      try(v.connection, null) == null || contains(keys(var.connections), try(v.connection, "__unset__"))
+    ])
+    error_message = format(
+      "These models are built on a connection that is not in var.connections: %s. A connection cannot be removed while models sit on it, in Terraform or in Omni. Remove the models in the same change, or restore the connection.",
+      join("; ", [
+        for k, v in var.models : "model \"${k}\" needs connection \"${try(v.connection, "")}\""
+        if try(v.connection, null) != null && !contains(keys(var.connections), try(v.connection, "__unset__"))
+      ])
+    )
+  }
 }
 
 variable "git_credentials" {
@@ -110,6 +139,38 @@ variable "groups" {
   validation {
     condition     = alltrue([for k, v in var.groups : v.connection_role == null || v.connection != null])
     error_message = "A group with a connection_role also needs a connection."
+  }
+
+  # "__unset__" rather than "": Terraform's coalesce skips empty strings as
+  # well as nulls, so coalesce(x, "") errors with nothing left to return. The
+  # sentinel is never a real key, and || does not short-circuit, so both sides
+  # of every guard below have to be safe to evaluate.
+  validation {
+    condition = alltrue([
+      for k, v in var.groups :
+      v.connection == null || contains(keys(var.connections), coalesce(v.connection, "__unset__"))
+    ])
+    error_message = format(
+      "These groups reference a connection that is not in var.connections: %s. Remove the reference or restore the connection.",
+      join("; ", [
+        for k, v in var.groups : "group \"${k}\" needs connection \"${v.connection}\""
+        if v.connection != null && !contains(keys(var.connections), coalesce(v.connection, "__unset__"))
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.groups :
+      v.model == null || contains(keys(var.models), coalesce(v.model, "__unset__"))
+    ])
+    error_message = format(
+      "These groups hold a role on a model that is not in var.models: %s. A model cannot be removed or re-keyed while something references it. Update the reference in the same change.",
+      join("; ", [
+        for k, v in var.groups : "group \"${k}\" needs model \"${v.model}\""
+        if v.model != null && !contains(keys(var.models), coalesce(v.model, "__unset__"))
+      ])
+    )
   }
 }
 
@@ -203,12 +264,50 @@ variable "tenant_groups" {
     condition     = alltrue([for k, v in var.tenant_groups : v.model == null || v.connection != null])
     error_message = "A tenant group with a model also needs a connection: a model role is scoped to both."
   }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.tenant_groups :
+      v.connection == null || contains(keys(var.connections), coalesce(v.connection, "__unset__"))
+    ])
+    error_message = format(
+      "These tenant groups reference a connection that is not in var.connections: %s. Remove the reference or restore the connection.",
+      join("; ", [
+        for k, v in var.tenant_groups : "tenant \"${k}\" needs connection \"${v.connection}\""
+        if v.connection != null && !contains(keys(var.connections), coalesce(v.connection, "__unset__"))
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.tenant_groups :
+      v.model == null || contains(keys(var.models), coalesce(v.model, "__unset__"))
+    ])
+    error_message = format(
+      "These tenant groups hold a role on a model that is not in var.models: %s. A model cannot be removed or re-keyed while a tenant references it. Rename with the name attribute instead of re-keying, or update the reference in the same change.",
+      join("; ", [
+        for k, v in var.tenant_groups : "tenant \"${k}\" needs model \"${v.model}\""
+        if v.model != null && !contains(keys(var.models), coalesce(v.model, "__unset__"))
+      ])
+    )
+  }
 }
 
 variable "tenant_base_connection" {
   description = "Key from var.connections that sessions query through. Only needed when tenant_routing is used."
   type        = string
   default     = null
+
+  validation {
+    condition = var.tenant_base_connection == null || contains(
+      keys(var.connections), coalesce(var.tenant_base_connection, "__unset__")
+    )
+    # coalesce, not a bare interpolation: Terraform evaluates error_message
+    # templates even when the condition passes, and a null in a template is an
+    # error in its own right.
+    error_message = "tenant_base_connection is \"${coalesce(var.tenant_base_connection, "unset")}\", which is not in var.connections. Embed routing queries through it, so set tenant_base_connection to null when removing that connection."
+  }
 }
 
 variable "tenant_routing" {
@@ -226,6 +325,19 @@ variable "tenant_routing" {
   }))
 
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.tenant_routing : contains(keys(var.connections), v.connection)
+    ])
+    error_message = format(
+      "These tenant_routing entries name a connection that is not in var.connections: %s.",
+      join("; ", [
+        for k, v in var.tenant_routing : "tenant \"${k}\" routes to connection \"${v.connection}\""
+        if !contains(keys(var.connections), v.connection)
+      ])
+    )
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -280,4 +392,52 @@ variable "content_grants" {
   }))
 
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.content_grants :
+      contains(concat(keys(var.existing_folders), keys(var.managed_folders)), v.folder)
+    ])
+    error_message = format(
+      "These content grants name a folder that is in neither existing_folders nor managed_folders: %s.",
+      join("; ", [
+        for k, v in var.content_grants : "grant \"${k}\" needs folder \"${v.folder}\""
+        if !contains(concat(keys(var.existing_folders), keys(var.managed_folders)), v.folder)
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.content_grants : [
+        for g in v.tenant_groups : contains(keys(var.tenant_groups), g)
+      ]
+    ]))
+    error_message = format(
+      "These content grants name a tenant group that is not in var.tenant_groups: %s. A tenant group cannot be removed while a grant names it. Drop it from the grant in the same change.",
+      join("; ", flatten([
+        for k, v in var.content_grants : [
+          for g in v.tenant_groups : "grant \"${k}\" names tenant group \"${g}\""
+          if !contains(keys(var.tenant_groups), g)
+        ]
+      ]))
+    )
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for k, v in var.content_grants : [
+        for g in v.internal_groups : contains(keys(var.groups), g)
+      ]
+    ]))
+    error_message = format(
+      "These content grants name an internal group that is not in var.groups: %s. Drop it from the grant in the same change.",
+      join("; ", flatten([
+        for k, v in var.content_grants : [
+          for g in v.internal_groups : "grant \"${k}\" names internal group \"${g}\""
+          if !contains(keys(var.groups), g)
+        ]
+      ]))
+    )
+  }
 }
