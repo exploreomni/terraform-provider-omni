@@ -6,10 +6,6 @@
 palettes = {}
 
 labels = {
-  "verified" = {
-    color       = "#0366d6"
-    description = "Reviewed and trusted content"
-  }
 
   "deprecated" = {
     color       = "#d73a49"
