@@ -18,8 +18,8 @@ tenant_attribute = "tenant_id"
 # "groups". To change only the visible name, set display_name rather than
 # re-keying: re-keying replaces the group and loses its membership.
 tenant_groups = {
-  acme   = { model = "embed_metrics", connection = "embed-base" }
-  globex = { model = "embed_metrics", connection = "embed-base" }
+  acme   = { model = "embed-test", connection = "embed-base" }
+  globex = { model = "embed-test", connection = "embed-base" }
 }
 
 # Where queries run.
