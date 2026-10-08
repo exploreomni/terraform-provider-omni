@@ -1,8 +1,11 @@
-# Internal access: the people who build content, as opposed to the embed
-# tenants who consume it.
+# Users, groups and folders.
 #
-# Separate from the embed modules on purpose. These are real users with seats,
-# managed through SCIM, and they need an organization API key.
+# One module for both internal people and embed tenants, because Omni has one
+# kind of creatable group. What differs between them is who owns the membership
+# list, which is var.groups' manage_members, not which module they live in.
+#
+# Creating users needs an organization API key: they are real seats managed
+# through SCIM.
 
 terraform {
   required_providers {
@@ -20,6 +23,29 @@ resource "omni_user" "this" {
   attributes   = each.value.attributes
 }
 
+# Groups.
+#
+# These are NOT the groups on the Embed tab of the Groups settings page. Omni
+# has two kinds, and only one can be created:
+#
+#   Entity groups appear under Embed, one per value of the "entity" URL
+#   parameter, created by the embed session itself along with a shared folder
+#   named after the entity. There is no creation endpoint, so Terraform cannot
+#   make them. Creating one by name here would produce a Standard group that
+#   merely shares the name - a different object, resolving differently.
+#
+#   Non-entity groups are what the "groups" claim in a signed URL takes; the
+#   embed docs call them that, and say entity membership is handled by "entity"
+#   instead. They are ordinary user groups over SCIM, and they are what this
+#   module creates, for internal teams and embed tenants alike.
+#
+# An instance with no embed groups yet shows no tabs at all on that page, so the
+# distinction stays invisible until something depends on it.
+#
+# One consequence for content_access: an entity's shared folder exists only
+# after that entity's first session, so a grant on it has to go through
+# existing_folders, and the data source fails at plan time until a session has
+# created it. Terraform can neither create that folder nor wait for it.
 resource "omni_user_group" "this" {
   for_each = var.groups
 
