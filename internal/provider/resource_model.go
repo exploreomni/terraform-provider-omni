@@ -61,8 +61,18 @@ func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"name": schema.StringAttribute{
-				Required:            true,
-				MarkdownDescription: "The model name. Must be unique among active models with the same kind and base model.",
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "The model name. Must be unique among active models with the same kind " +
+					"and base model.\n\n" +
+					"Optional because Omni names some models itself. A `SCHEMA` model is named after " +
+					"its connection whatever you ask for, so leave this unset on one: setting it " +
+					"produces \"Provider produced inconsistent result after apply\", since a provider " +
+					"may not return a value that contradicts the configuration.\n\n" +
+					"Renaming is an in-place update, not a replacement.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"model_kind": schema.StringAttribute{
 				Optional: true,

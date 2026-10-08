@@ -165,7 +165,7 @@ type ModelInput struct {
 	ConnectionID         string `json:"connectionId,omitempty"`
 	BaseModelID          string `json:"baseModelId,omitempty"`
 	ModelKind            string `json:"modelKind"`
-	ModelName            string `json:"modelName"`
+	ModelName            string `json:"modelName,omitempty"`
 	AllowAsWorkbookBase  *bool  `json:"allowAsWorkbookBase,omitempty"`
 	UsesIsolatedBranches *bool  `json:"usesIsolatedBranches,omitempty"`
 }

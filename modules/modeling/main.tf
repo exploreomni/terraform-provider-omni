@@ -27,7 +27,11 @@ terraform {
 resource "omni_model" "schema" {
   for_each = { for k, v in var.models : k => v if v.kind == "SCHEMA" }
 
-  name          = coalesce(each.value.name, each.key)
+  # No name. Omni names a schema model after its connection whatever is asked
+  # for, and a provider may not return a value that contradicts configuration,
+  # so setting one fails the apply with "inconsistent result after apply". The
+  # map key stays the Terraform-side identity; the Omni-side name is the
+  # connection's.
   model_kind    = each.value.kind
   connection_id = each.value.connection_id
   base_model_id = each.value.base_model_id

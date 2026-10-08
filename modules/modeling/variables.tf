@@ -12,6 +12,9 @@ variable "models" {
     the UI's "Build Schema". A connection needs one before anything else can be
     built on it, and schema models are created ahead of every other kind.
 
+    A schema model ignores name: Omni names it after its connection. The key is
+    still yours and is what other modules reference.
+
     kind, connection_id and base_model_id all force replacement.
   DESC
 
@@ -42,6 +45,14 @@ variable "models" {
   }))
 
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.models :
+      v.kind != "SCHEMA" || v.name == null
+    ])
+    error_message = "A SCHEMA model cannot be given a name: Omni names it after its connection, and a provider may not contradict configuration. Remove name from the schema model."
+  }
 }
 
 variable "git_credentials" {
