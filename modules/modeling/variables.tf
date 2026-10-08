@@ -19,6 +19,12 @@ variable "models" {
     A schema model also cannot be deleted. Destroying one removes it from state
     only; Omni removes it with the connection.
 
+    A model built on a connection needs that connection's schema model to have
+    been refreshed, not merely created, and the refresh is asynchronous. The
+    provider waits for it, so one apply can create a connection, its schema
+    model and the models on it, but that apply will pause while the schema
+    settles.
+
     kind, connection_id and base_model_id all force replacement.
   DESC
 
