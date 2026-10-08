@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 // Folder is a content folder.
@@ -229,13 +230,69 @@ type listModelsResponse struct {
 	PageInfo *PageInfo `json:"pageInfo,omitempty"`
 }
 
-// CreateModel creates a shared or shared extension model.
+// CreateModel creates a schema, shared or shared extension model.
+//
+// A model built on a connection needs that connection's schema model to be
+// refreshed, not merely to exist. The refresh is asynchronous: creating a
+// SCHEMA model registers it and starts the introspection, and POST /v1/models
+// answers a bare 404 for a shared model until that has produced something.
+//
+// So a 404 here is retried. It means "not ready yet" far more often than it
+// means "wrong id", and when it really is a wrong id the budget expires and the
+// error says so. 429 is retried for the same reason the schedule create does:
+// the inner backoff in Do can run out while the outer loop can afford to wait.
+//
+// A SCHEMA model create is not subject to this and succeeds on the first
+// attempt, so the budget only costs time in the case it exists for.
+//
+// 90 seconds: the refresh on a warehouse of this size settles well inside that.
+// A cold or very large warehouse may need longer, and the error says what to
+// check rather than leaving the cause to be guessed.
 func (c *Client) CreateModel(ctx context.Context, in ModelInput) (*Model, error) {
-	var out modelResponse
-	if err := c.Post(ctx, "/v1/models", in, &out); err != nil {
-		return nil, err
+	const (
+		attempts = 10
+		budget   = 90 * time.Second
+	)
+
+	deadline := time.Now().Add(budget)
+
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			if time.Now().After(deadline) {
+				break
+			}
+			// 3, 6, 9 ... capped at 20, so the budget goes on waiting rather
+			// than on hammering the endpoint.
+			wait := time.Duration(attempt*3) * time.Second
+			if wait > 20*time.Second {
+				wait = 20 * time.Second
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(wait):
+			}
+		}
+
+		var out modelResponse
+		err := c.Post(ctx, "/v1/models", in, &out)
+		if err == nil {
+			return &out.Model, nil
+		}
+		lastErr = err
+		if !IsNotFound(err) && !IsRateLimited(err) {
+			return nil, err
+		}
 	}
-	return &out.Model, nil
+
+	return nil, fmt.Errorf(
+		"creating a %s model on connection %s still failed after waiting up to %s. "+
+			"A model needs its connection's schema model to have been refreshed, not just "+
+			"created, and the refresh is asynchronous. If the connection's schema is empty in "+
+			"Omni, refresh it and apply again: %w",
+		in.ModelKind, in.ConnectionID, budget, lastErr,
+	)
 }
 
 // RefreshModel triggers a schema refresh on a model.
