@@ -32,15 +32,3 @@ groups = {
     connection_role = "CONNECTION_ADMIN"
   }
 }
-
-# An internal folder with its own grant. Separate from managed_folders above:
-# these belong to the internal access layer and carry their grant inline, which
-# is the common case for a team folder.
-folders = {
-  "analytics" = {
-    name   = "Analytics"
-    scope  = "organization"
-    groups = ["analysts"]
-    role   = "EDITOR"
-  }
-}

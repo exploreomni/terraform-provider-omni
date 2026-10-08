@@ -1,85 +1,53 @@
-variable "existing_folders" {
-  description = "Folders that already exist, keyed by a local name, valued by path. Looked up, never created."
-  type        = map(string)
-  default     = {}
-}
+variable "folders" {
+  description = <<-DESC
+    Folders, keyed by a local name the grants reference.
 
-variable "managed_folders" {
-  description = "Folders to create, keyed by path or local name. parent refers to another key in this map."
+    existing_path looks a folder up by its path instead of creating it. Without
+    it the folder is created and name is required; parent nests it one level
+    inside another key, and a nested folder inherits its parent's scope.
+
+    The root module validates the combinations and names the folder at fault;
+    these are the same checks, kept here so the module stands on its own.
+  DESC
+
   type = map(object({
-    name               = string
+    existing_path      = optional(string)
+    name               = optional(string)
     parent             = optional(string)
     scope              = optional(string)
     owner_id           = optional(string)
     delete_recursively = optional(bool, false)
   }))
+
   default = {}
 
-  # Both checks resolve to coalesce(v.parent, k), never to v.parent directly.
-  # Terraform's || does not short-circuit, so a guard of the form
-  # "v.parent == null || f(v.parent)" still calls f with null and fails on the
-  # argument rather than reporting the condition. Substituting the folder's own
-  # key when it has no parent makes the check trivially true for a top-level
-  # folder and passes a real key in every case.
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
-      contains(keys(var.managed_folders), coalesce(v.parent, k))
+      for k, v in var.folders : v.existing_path != null || v.name != null
     ])
-    error_message = "Every parent must be another key in managed_folders."
-  }
-
-  validation {
-    # One level of nesting. A child of a child would otherwise fail later with
-    # an unhelpful index error, so it is caught here instead.
-    condition = alltrue([
-      for k, v in var.managed_folders :
-      try(var.managed_folders[coalesce(v.parent, k)].parent, null) == null
-    ])
-    error_message = "managed_folders supports one level of nesting: a parent cannot itself have a parent."
+    error_message = "Every folder needs existing_path to look one up, or name to create one."
   }
 
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
-      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
+      for k, v in var.folders :
+      v.existing_path != null || v.parent != null || v.scope != null
     ])
-    error_message = "scope must be organization or restricted."
-  }
-
-  validation {
-    # A top-level folder states its scope. Left unset, the provider silently
-    # chooses organization, which is the behaviour this module exists to make
-    # visible.
-    condition = alltrue([
-      for k, v in var.managed_folders :
-      v.parent != null || v.scope != null
-    ])
-    error_message = "Every top-level folder in managed_folders must state a scope: organization or restricted."
-  }
-
-  validation {
-    # Scope is inherited, so a child setting one can only disagree with its parent.
-    condition = alltrue([
-      for k, v in var.managed_folders :
-      v.parent == null || v.scope == null
-    ])
-    error_message = "A nested folder inherits its parent's scope and must not set scope itself."
+    error_message = "A created top-level folder must state a scope: organization or restricted."
   }
 
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
-      coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
+      for k, v in var.folders : v.parent == null || v.scope == null
     ])
-    error_message = "A restricted folder needs owner_id when the provider uses an organization API key."
+    error_message = "A nested folder inherits its parent's scope and must not state one."
   }
 }
 
 variable "grants" {
   description = <<-DESC
     Permissions to grant, keyed by a name of your choosing. folder refers to a
-    key in existing_folders or managed_folders.
+    key in var.folders.
 
     One grant per role: to give two groups different roles on one folder,
     declare two grants.

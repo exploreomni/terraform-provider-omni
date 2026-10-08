@@ -12,11 +12,10 @@ output "models" {
 }
 
 output "internal" {
-  description = "Internal users, groups and folders. Empty on an embed-only instance."
+  description = "Users and groups. Folders are under content, wherever they came from."
   value = {
-    users   = module.access.user_ids
-    groups  = module.access.group_ids
-    folders = module.access.folder_ids
+    users  = module.access.user_ids
+    groups = module.access.group_ids
   }
 }
 

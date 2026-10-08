@@ -15,3 +15,10 @@ user_attribute_values = {
     tenant = "acme"
   }
 }
+
+# The attribute embed scoping keys off. A reference to a definition, the same as
+# the keys above, which is why it lives here rather than with the embed routing.
+#
+# Set tenant_attribute_id to reference it by ID instead. Preferred: a rename in
+# the UI cannot then break scoping in silence.
+tenant_attribute = "tenant_id"

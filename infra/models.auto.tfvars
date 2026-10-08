@@ -12,3 +12,7 @@ models = {
     connection = "embed-base"
   }
 }
+
+# Model version control. Unset: needs a repository and a credential, so
+# omni_model_git has never run.
+# git_credentials = {}

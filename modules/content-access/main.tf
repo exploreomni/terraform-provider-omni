@@ -20,15 +20,17 @@ terraform {
   }
 }
 
-# Folders that already exist. Looked up rather than created, so a missing one
-# fails at plan time instead of being silently recreated.
+# Folders, looked up or created.
+#
+# existing_path decides which. A looked-up folder fails at plan time if it is
+# missing, rather than being silently created next to the real one.
 data "omni_folder" "existing" {
-  for_each = var.existing_folders
+  for_each = { for k, v in var.folders : k => v if v.existing_path != null }
 
-  path = each.value
+  path = each.value.existing_path
 }
 
-# Top-level folders and nested ones are two resources rather than one.
+# Top-level and nested folders are two resources rather than one.
 #
 # A single resource whose parent_folder_id points at another instance of itself
 # is a self-reference, which Terraform rejects outright. Splitting by depth
@@ -38,14 +40,16 @@ data "omni_folder" "existing" {
 # needs. A deeper tree needs a third resource, or the folders creating
 # themselves by path.
 resource "omni_folder" "managed" {
-  for_each = { for k, v in var.managed_folders : k => v if v.parent == null }
+  for_each = {
+    for k, v in var.folders : k => v if v.existing_path == null && v.parent == null
+  }
 
   name = each.value.name
   path = each.key
 
   # Stated rather than defaulted. The provider falls back to "organization",
-  # which on an embed instance is a decision about who can reach the folder
-  # before any grant is applied, so it should be written down.
+  # which is a decision about who can reach the folder before any grant is
+  # applied, so it should be written down.
   scope    = each.value.scope
   owner_id = each.value.owner_id
 
@@ -53,10 +57,14 @@ resource "omni_folder" "managed" {
 }
 
 resource "omni_folder" "child" {
-  for_each = { for k, v in var.managed_folders : k => v if v.parent != null }
+  for_each = {
+    for k, v in var.folders : k => v if v.existing_path == null && v.parent != null
+  }
 
-  name               = each.value.name
-  parent_folder_id   = omni_folder.managed[each.value.parent].id
+  name             = each.value.name
+  parent_folder_id = omni_folder.managed[each.value.parent].id
+
+  # No scope: a nested folder inherits its parent's.
   delete_recursively = each.value.delete_recursively
 }
 

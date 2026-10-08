@@ -43,9 +43,10 @@ resource "omni_user" "this" {
 # distinction stays invisible until something depends on it.
 #
 # One consequence for content_access: an entity's shared folder exists only
-# after that entity's first session, so a grant on it has to go through
-# existing_folders, and the data source fails at plan time until a session has
-# created it. Terraform can neither create that folder nor wait for it.
+# after that entity's first session, so a grant on it has to go through a
+# folder with existing_path set, and the data source fails at plan time until a
+# session has created it. Terraform can neither create that folder nor wait for
+# it.
 resource "omni_user_group" "this" {
   for_each = var.groups
 
@@ -92,28 +93,4 @@ resource "omni_user_group_model_role" "connection" {
   user_group_id = omni_user_group.this[each.key].id
   connection_id = each.value.connection_id
   role_name     = each.value.connection_role
-}
-
-resource "omni_folder" "this" {
-  for_each = var.folders
-
-  name = each.value.name
-  path = each.key
-
-  # Stated rather than defaulted, the same as in the content-access module.
-  # Scope decides who can reach the folder before the grant below applies, and
-  # on an internal instance that is the difference between org-wide shared
-  # content and a folder only its group can open.
-  scope    = each.value.scope
-  owner_id = each.value.owner_id
-}
-
-resource "omni_folder_permission" "this" {
-  for_each = {
-    for k, v in var.folders : k => v if length(v.groups) > 0
-  }
-
-  folder_id      = omni_folder.this[each.key].id
-  role           = each.value.role
-  user_group_ids = [for g in each.value.groups : omni_user_group.this[g].id]
 }

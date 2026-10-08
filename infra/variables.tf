@@ -257,56 +257,6 @@ variable "groups" {
   }
 }
 
-variable "folders" {
-  description = <<-DESC
-    Internal folders, keyed by path.
-
-    scope is required, not defaulted. It decides who can reach the folder
-    before the groups below are granted anything:
-
-      organization  org-wide shared content, with the grant adding a role
-      restricted    reachable only through the grant, and needs owner_id when
-                    the provider uses an organization API key
-
-    Most internal folders are organization. Use restricted for content one
-    team should hold on its own.
-  DESC
-
-  type = map(object({
-    name     = string
-    scope    = optional(string)
-    owner_id = optional(string)
-    groups   = optional(list(string), [])
-    role     = optional(string, "EDITOR")
-  }))
-  default = {}
-
-  validation {
-    condition     = alltrue([for k, v in var.folders : v.scope != null])
-    error_message = "Every folder must state a scope: organization or restricted."
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.folders :
-      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
-    ])
-    error_message = "scope must be organization or restricted."
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.folders :
-      coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
-    ])
-    error_message = "A restricted folder needs owner_id when the provider uses an organization API key."
-  }
-}
-
-# --------------------------------------------------------------------------
-# Embed. Three independent maps. Configure only what a deployment needs.
-# --------------------------------------------------------------------------
-
 variable "tenant_attribute_id" {
   description = <<-DESC
     ID of the user attribute that scopes tenants. Preferred over
@@ -388,101 +338,157 @@ variable "tenant_routing" {
 # groups alike.
 # --------------------------------------------------------------------------
 
-variable "existing_folders" {
-  description = "Folders that already exist, keyed by a local name, valued by path. Looked up, never created."
-  type        = map(string)
-  default     = {}
-}
-
-variable "managed_folders" {
+variable "folders" {
   description = <<-DESC
-    Folders to create, keyed by local name.
+    Folders, keyed by a local name that the grants below reference.
 
-    scope is required on a top-level folder: organization or restricted. A
-    restricted folder also needs owner_id when the provider uses an
-    organization API key. A nested folder inherits its parent's scope and must
-    not set one.
+    A folder is either looked up or created, and existing_path is what decides
+    which. Set it and the folder is looked up by its path in Omni, so a missing
+    one fails at plan time rather than being silently created alongside the real
+    one. Leave it unset and the folder is created, which requires name.
 
-    Every attribute the module accepts has to be declared here too. Terraform
-    drops an attribute a variable's type does not mention, without warning, so
-    an undeclared scope would be discarded on the way through and the folder
-    would silently fall back to the provider default.
+    parent nests a created folder inside another key. One level only: a hub with
+    subfolders is what this supports, and a deeper tree would need either a
+    third resource or folders creating themselves by path.
+
+    scope is required on a created top-level folder and must not be set on a
+    nested one, which inherits its parent's:
+
+      organization  org-wide shared content, with a grant adding a role
+      restricted    reachable only through a grant, and needs owner_id when the
+                    provider uses an organization API key
+
+    No grants here. Who can see a folder is var.content_grants, so there is one
+    place to look rather than two.
   DESC
 
   type = map(object({
-    name               = string
+    # Look this folder up instead of creating it. The path as Omni shows it.
+    existing_path = optional(string)
+
+    name               = optional(string)
     parent             = optional(string)
     scope              = optional(string)
     owner_id           = optional(string)
     delete_recursively = optional(bool, false)
   }))
+
   default = {}
 
-  # Checked here as well as in the module so the message can name the folder
-  # before the plan reaches the module at all.
-  #
-  # Every check resolves coalesce(v.parent, k), never v.parent directly:
-  # Terraform's || does not short-circuit, so "v.parent == null || f(v.parent)"
-  # still calls f with null and fails on the argument instead of reporting the
-  # condition.
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
-      contains(keys(var.managed_folders), coalesce(v.parent, k))
+      for k, v in var.folders : v.existing_path != null || v.name != null
     ])
     error_message = format(
-      "These folders name a parent that is not another key in managed_folders: %s.",
+      "These folders neither look one up nor create one: %s. Set existing_path to look a folder up by its path, or name to create it.",
       join("; ", [
-        for k, v in var.managed_folders : "folder \"${k}\" names parent \"${v.parent}\""
-        if v.parent != null && !contains(keys(var.managed_folders), coalesce(v.parent, "__unset__"))
+        for k, v in var.folders : "folder \"${k}\""
+        if v.existing_path == null && v.name == null
       ])
     )
   }
 
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
-      try(var.managed_folders[coalesce(v.parent, k)].parent, null) == null
-    ])
-    error_message = "managed_folders supports one level of nesting: a parent cannot itself have a parent."
-  }
-
-  validation {
-    condition = alltrue([
-      for k, v in var.managed_folders :
-      v.parent != null || v.scope != null
+      for k, v in var.folders :
+      v.existing_path == null || (v.name == null && v.parent == null && v.scope == null && v.owner_id == null)
     ])
     error_message = format(
-      "These top-level folders do not state a scope: %s. Set organization or restricted. Left unset, the provider silently chooses organization, which is a decision about who can reach the folder before any grant applies.",
-      join("; ", [for k, v in var.managed_folders : "folder \"${k}\"" if v.parent == null && v.scope == null])
+      "These folders set existing_path alongside attributes that only apply to a folder being created: %s. A looked-up folder already has its name, parent and scope; Terraform does not change them.",
+      join("; ", [
+        for k, v in var.folders : "folder \"${k}\""
+        if v.existing_path != null && !(v.name == null && v.parent == null && v.scope == null && v.owner_id == null)
+      ])
+    )
+  }
+
+  # Every check below resolves coalesce(v.parent, k) rather than v.parent, because
+  # Terraform's || does not short-circuit: "v.parent == null || f(v.parent)" still
+  # calls f with null and fails on the argument instead of reporting the condition.
+  validation {
+    condition = alltrue([
+      for k, v in var.folders : contains(keys(var.folders), coalesce(v.parent, k))
+    ])
+    error_message = format(
+      "These folders name a parent that is not another key in var.folders: %s.",
+      join("; ", [
+        for k, v in var.folders : "folder \"${k}\" names parent \"${v.parent}\""
+        if v.parent != null && !contains(keys(var.folders), coalesce(v.parent, "__unset__"))
+      ])
     )
   }
 
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
-      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
+      for k, v in var.folders :
+      try(var.folders[coalesce(v.parent, k)].parent, null) == null
+    ])
+    error_message = "var.folders supports one level of nesting: a parent cannot itself have a parent."
+  }
+
+  # The sentinel rather than k: coalesce(v.parent, k) makes a parentless folder
+  # look at itself, and a looked-up folder would then fail its own check on its
+  # own existing_path. "__unset__" is never a real key, so the lookup misses and
+  # try returns null, which is the pass.
+  validation {
+    condition = alltrue([
+      for k, v in var.folders :
+      try(var.folders[coalesce(v.parent, "__unset__")].existing_path, null) == null
+    ])
+    error_message = format(
+      "These folders nest inside a looked-up folder: %s. A parent has to be one Terraform creates, because nesting is set at creation.",
+      join("; ", [
+        for k, v in var.folders : "folder \"${k}\" names parent \"${v.parent}\""
+        if v.parent != null && try(var.folders[coalesce(v.parent, "__unset__")].existing_path, null) != null
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.folders :
+      v.existing_path != null || v.parent != null || v.scope != null
+    ])
+    error_message = format(
+      "These top-level folders do not state a scope: %s. Set organization or restricted. Left unset, the provider silently chooses organization, which is a decision about who can reach the folder before any grant applies.",
+      join("; ", [
+        for k, v in var.folders : "folder \"${k}\""
+        if v.existing_path == null && v.parent == null && v.scope == null
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.folders :
+      v.scope == null || contains(["organization", "restricted"], coalesce(v.scope, "organization"))
     ])
     error_message = "scope must be organization or restricted."
   }
 
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
+      for k, v in var.folders :
       v.parent == null || v.scope == null
     ])
-    error_message = "A nested folder inherits its parent's scope and must not set scope itself."
+    error_message = format(
+      "These nested folders state a scope: %s. A nested folder inherits its parent's, and setting one here would be ignored.",
+      join("; ", [
+        for k, v in var.folders : "folder \"${k}\""
+        if v.parent != null && v.scope != null
+      ])
+    )
   }
 
   validation {
     condition = alltrue([
-      for k, v in var.managed_folders :
+      for k, v in var.folders :
       coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
     ])
     error_message = format(
-      "These restricted folders have no owner_id: %s. A restricted folder needs an owner when the provider uses an organization API key.",
+      "These restricted folders have no owner_id: %s. A restricted folder needs one when the provider uses an organization API key.",
       join("; ", [
-        for k, v in var.managed_folders : "folder \"${k}\""
+        for k, v in var.folders : "folder \"${k}\""
         if coalesce(v.scope, "organization") == "restricted" && v.owner_id == null
       ])
     )
@@ -555,8 +561,12 @@ variable "document_grants" {
 
 variable "content_grants" {
   description = <<-DESC
-    Who can see which folder. folder is a key from existing_folders or
-    managed_folders; groups are keys from var.groups.
+    Who can see which folder. folder is a key from var.folders; groups are keys
+    from var.groups.
+
+    The only place a folder grant is expressed. var.folders says which folders
+    exist and this says who can see them, so there is one place to look for
+    each question.
   DESC
 
   type = map(object({
@@ -588,13 +598,13 @@ variable "content_grants" {
   validation {
     condition = alltrue([
       for k, v in var.content_grants :
-      contains(concat(keys(var.existing_folders), keys(var.managed_folders)), v.folder)
+      contains(keys(var.folders), v.folder)
     ])
     error_message = format(
-      "These content grants name a folder that is in neither existing_folders nor managed_folders: %s.",
+      "These content grants name a folder that is not in var.folders: %s.",
       join("; ", [
         for k, v in var.content_grants : "grant \"${k}\" needs folder \"${v.folder}\""
-        if !contains(concat(keys(var.existing_folders), keys(var.managed_folders)), v.folder)
+        if !contains(keys(var.folders), v.folder)
       ])
     )
   }

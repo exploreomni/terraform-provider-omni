@@ -141,8 +141,6 @@ module "access" {
       connection_id = v.connection == null ? null : module.warehouse.connection_ids[v.connection]
     }
   }
-
-  folders = var.folders
 }
 
 # --------------------------------------------------------------------------
@@ -196,8 +194,7 @@ module "content_access" {
   # here it holds even when it is empty.
   depends_on = [module.access]
 
-  existing_folders = var.existing_folders
-  managed_folders  = var.managed_folders
+  folders = var.folders
 
   grants = {
     for k, v in var.content_grants : k => {
