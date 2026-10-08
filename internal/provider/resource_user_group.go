@@ -134,10 +134,37 @@ func (r *userGroupResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	members, diags := membersFromSet(ctx, plan.MemberIDs)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
+	// An absent member_ids means membership is not managed here, and Read
+	// already declines to track it. Update has to be just as careful: the API
+	// call below is a SCIM replace and GroupInput.Members carries no omitempty,
+	// so passing the empty set that a null produces would send "members": []
+	// and empty the group. Changing nothing but display_name would remove
+	// everyone, which on an embed group is every user its sessions created.
+	//
+	// So when membership is unmanaged, read the current members and pass them
+	// back unchanged. Sending them explicitly rather than omitting the field
+	// keeps this correct whether the API treats an absent members as "leave
+	// alone" or as "clear".
+	var members []client.GroupMembr
+	if plan.MemberIDs.IsNull() {
+		current, err := r.client.GetGroup(ctx, state.ID.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to read Omni user group before updating it",
+				"Membership is not managed for this group, so its current members have to be "+
+					"read and sent back unchanged. That read failed, and updating without it "+
+					"would empty the group: "+err.Error(),
+			)
+			return
+		}
+		members = current.Members
+	} else {
+		var diags diagnostics
+		members, diags = membersFromSet(ctx, plan.MemberIDs)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	updated, err := r.client.ReplaceGroup(ctx, state.ID.ValueString(), client.GroupInput{
