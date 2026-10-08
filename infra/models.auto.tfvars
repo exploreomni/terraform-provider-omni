@@ -1,5 +1,5 @@
-# Models. The schema model is the connection's schema: Omni names it after
-# the connection and it cannot be deleted on its own.
+# Models. A schema model is the connection's schema: Omni names it after the
+# connection, it shares the connection's ID, and it cannot be deleted alone.
 
 models = {
   "embed-base-schema" = {
