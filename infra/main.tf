@@ -72,6 +72,24 @@ module "branding" {
   labels = var.labels
 }
 
+# Schema refresh schedules. Last of the connection-scoped resources, because a
+# schedule cannot be created until the connection has a schema model, and the
+# modeling module is what creates those.
+module "schema_refresh" {
+  source = "../modules/schema-refresh"
+
+  depends_on = [module.modeling]
+
+  schedules = {
+    for k, v in var.connections : k => {
+      connection_id = module.warehouse.connection_ids[k]
+      cron          = v.refresh_schedule.cron
+      timezone      = v.refresh_schedule.timezone
+      hard_refresh  = try(v.refresh_schedule.hard_refresh, false)
+    } if try(v.refresh_schedule, null) != null
+  }
+}
+
 # --------------------------------------------------------------------------
 # Internal: people who build content. Leave users, groups and folders empty on
 # an instance used only for embedding.

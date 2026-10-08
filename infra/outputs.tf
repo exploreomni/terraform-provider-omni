@@ -2,6 +2,11 @@ output "connections" {
   value = module.warehouse.connection_ids
 }
 
+output "schema_refresh_schedules" {
+  description = "Connection key to schema refresh schedule ID."
+  value       = module.schema_refresh.schedule_ids
+}
+
 output "models" {
   value = module.modeling.model_ids
 }
