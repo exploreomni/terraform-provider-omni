@@ -238,6 +238,18 @@ func (c *Client) CreateModel(ctx context.Context, in ModelInput) (*Model, error)
 	return &out.Model, nil
 }
 
+// RefreshModel triggers a schema refresh on a model.
+//
+// This is what makes a newly created SCHEMA model useful: creating the model
+// registers it, introspecting the warehouse is a separate step. The UI's
+// "Build Schema" button does both.
+//
+// The call starts the refresh rather than waiting for it, so a success here
+// means Omni accepted the request, not that the schema is populated yet.
+func (c *Client) RefreshModel(ctx context.Context, id string) error {
+	return c.Post(ctx, "/v1/models/"+url.PathEscape(id)+"/refresh", struct{}{}, nil)
+}
+
 // RenameModel renames a model. Workbook and query models cannot be renamed.
 //
 // The PATCH response shape is not dependable: it may be the model, may wrap it

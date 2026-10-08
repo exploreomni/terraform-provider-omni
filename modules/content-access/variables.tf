@@ -9,6 +9,8 @@ variable "managed_folders" {
   type = map(object({
     name               = string
     parent             = optional(string)
+    scope              = optional(string)
+    owner_id           = optional(string)
     delete_recursively = optional(bool, false)
   }))
   default = {}
@@ -36,6 +38,42 @@ variable "managed_folders" {
     ])
     error_message = "managed_folders supports one level of nesting: a parent cannot itself have a parent."
   }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      contains(["organization", "restricted"], coalesce(v.scope, "organization"))
+    ])
+    error_message = "scope must be organization or restricted."
+  }
+
+  validation {
+    # A top-level folder states its scope. Left unset, the provider silently
+    # chooses organization, which is the behaviour this module exists to make
+    # visible.
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      v.parent != null || v.scope != null
+    ])
+    error_message = "Every top-level folder in managed_folders must state a scope: organization or restricted."
+  }
+
+  validation {
+    # Scope is inherited, so a child setting one can only disagree with its parent.
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      v.parent == null || v.scope == null
+    ])
+    error_message = "A nested folder inherits its parent's scope and must not set scope itself."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.managed_folders :
+      coalesce(v.scope, "organization") != "restricted" || v.owner_id != null
+    ])
+    error_message = "A restricted folder needs owner_id when the provider uses an organization API key."
+  }
 }
 
 variable "grants" {
@@ -55,4 +93,18 @@ variable "grants" {
   }))
 
   default = {}
+
+  validation {
+    # The API rejects a permission with neither, and its message
+    # ("userIds or userGroupIds must be provided") does not say which grant.
+    #
+    # group_ids is resolved from names at apply time, so this cannot tell "none
+    # configured" from "not created yet". The root module checks the names,
+    # which are known at plan time; this is the backstop for direct callers.
+    condition = alltrue([
+      for k, v in var.grants :
+      length(coalesce(v.group_ids, [])) + length(coalesce(v.user_ids, [])) > 0
+    ])
+    error_message = "A grant must name at least one group or user. Remove the grant rather than leaving it empty."
+  }
 }
