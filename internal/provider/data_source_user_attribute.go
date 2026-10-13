@@ -40,6 +40,7 @@ type userAttributeDataSourceModel struct {
 	Description    types.String `tfsdk:"description"`
 	Type           types.String `tfsdk:"type"`
 	DefaultValue   types.String `tfsdk:"default_value"`
+	DefaultValues  types.List   `tfsdk:"default_values"`
 	MultipleValues types.Bool   `tfsdk:"multiple_values"`
 	System         types.Bool   `tfsdk:"system"`
 }
@@ -79,8 +80,16 @@ func (d *userAttributeDataSource) Schema(_ context.Context, _ datasource.SchemaR
 				MarkdownDescription: "`String` or `Number`. Number attributes are stored as strings for precision.",
 			},
 			"default_value": dschema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Value used when a user has none set.",
+				Computed: true,
+				MarkdownDescription: "Value used when a user has none set. Null when the attribute takes " +
+					"multiple values, because there is more than one: read `default_values` instead.",
+			},
+			"default_values": dschema.ListAttribute{
+				Computed:    true,
+				ElementType: types.StringType,
+				MarkdownDescription: "Values used when a user has none set, for an attribute that takes " +
+					"multiple values. A single-valued attribute reports its one default here too, so this " +
+					"is the attribute to read when the shape is not known in advance.",
 			},
 			"multiple_values": dschema.BoolAttribute{
 				Computed:            true,
@@ -142,7 +151,8 @@ func (d *userAttributeDataSource) Read(ctx context.Context, req datasource.ReadR
 		Label:          stringOrNull(attr.Label),
 		Description:    stringOrNull(ptrString(attr.Description)),
 		Type:           stringOrNull(attr.Type),
-		DefaultValue:   stringOrNull(ptrString(attr.DefaultValue)),
+		DefaultValue:   singleDefault(attr.DefaultValue),
+		DefaultValues:  defaultList(ctx, attr.DefaultValue, &resp.Diagnostics),
 		MultipleValues: types.BoolValue(attr.MultipleValues),
 		System:         types.BoolValue(attr.System),
 	}
