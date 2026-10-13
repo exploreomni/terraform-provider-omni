@@ -4,11 +4,14 @@
 # so an account that already exists has to be imported or the apply fails:
 #
 #   terraform import 'module.access.omni_user.this["ashima@omni.co"]' <user id>
-# Empty while the import ID is unknown. omni_user cannot create an account that
-# already exists, and the ID an import needs is what lookup-user-id.tf is for.
-# Everything in content_access depends on this module, so leaving a doomed user
-# here blocks the folders and grants too.
-users = {}
+# Adopted rather than created; see infra/imports.tf. omni_user cannot create an
+# account that already exists, and everything in content_access depends on this
+# module, so getting this wrong blocks the folders and grants too.
+users = {
+  "ashima@omni.co" = {
+    display_name = "Ashima Mahajan"
+  }
+}
 
 # Two groups, covering the two scopes a role can have.
 #

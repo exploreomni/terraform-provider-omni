@@ -10,9 +10,13 @@ user_attributes = {
 
 # A value is set on a person or it comes from the definition's default. There is
 # no third source, and in particular no group-assigned value.
-# Empty with var.users empty: a value can only be set on a user Terraform
-# manages, and the root validation says so rather than letting the apply fail.
-user_attribute_values = {}
+# A value can only be set on a user Terraform manages, which the root validation
+# checks before the apply rather than after.
+user_attribute_values = {
+  "ashima@omni.co" = {
+    tenant = "acme"
+  }
+}
 
 # The attribute embed scoping keys off. A reference to a definition, the same as
 # the keys above, which is why it lives here rather than with the embed routing.

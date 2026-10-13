@@ -8,21 +8,22 @@
 # Remove a block once its apply has run. Leaving it is harmless, but it stops
 # describing anything true.
 
-# omni_user.Create calls SCIM directly and does not adopt an existing account.
-# Without this, the apply fails with:
+# omni_user.Create calls SCIM directly and does not adopt an existing account,
+# so without this the apply fails with a 409 and stops the access module.
+# content_access depends on that module, so the folders and grants behind it are
+# never attempted either, while the plan still shows all of them.
 #
-#   POST /scim/v2/users returned 409: ... user faeb3931-... already has active
-#   memberships to organization ...
+# This ID came from data "omni_user", which is the only source that was right.
+# A person has at least two UUIDs here and none of them is labelled:
 #
-# That failure stops the access module, and content_access depends on it, so the
-# folders and grants behind it are never attempted either. The plan still shows
-# all of them, which is why a green plan said nothing about this.
+#   113afa8e-...  what the provider reads by, and what the Omni UI's
+#                 /users/<id> URL shows. This one.
+#   faeb3931-...  what a colliding create names in its 409 message, as "user".
+#                 It does not resolve through GET /scim/v2/users/{id} at all.
 #
-# The ID below is the SCIM user ID, which is what omni_user reads by:
-# GET /scim/v2/users/{id}. It is NOT the ID in the Omni UI's /users/<id> URL,
-# which is the membership ID. Both are UUIDs for the same person and neither is
-# labelled; the 409 above is the one place the SCIM ID appears plainly.
+# The 409 is the more official-looking source and it is the wrong one. Ask the
+# provider rather than reading an ID out of an error message.
 import {
   to = module.access.omni_user.this["ashima@omni.co"]
-  id = "faeb3931-f106-4e37-bb24-8748bf43bfa5"
+  id = "113afa8e-6e7c-4d3a-a31e-25438e329196"
 }
