@@ -10,6 +10,8 @@ user_attributes = {
 
 # A value is set on a person or it comes from the definition's default. There is
 # no third source, and in particular no group-assigned value.
+# A value can only be set on a user Terraform manages, which the root validation
+# checks before the apply rather than after.
 user_attribute_values = {
   "ashima@omni.co" = {
     tenant = "acme"
