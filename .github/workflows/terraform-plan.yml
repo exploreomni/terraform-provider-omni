@@ -81,7 +81,10 @@ jobs:
         env:
           OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
           OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
-          TF_VAR_connection_passwords: ${{ secrets.CONNECTION_PASSWORDS }}
+          TF_VAR_connection_passwords: ${{ secrets.CONNECTION_PASSWORDS || '{}' }}
+          TF_VAR_connection_private_keys: ${{ secrets.CONNECTION_PRIVATE_KEYS || '{}' }}
+          TF_VAR_connection_oauth_secrets: ${{ secrets.CONNECTION_OAUTH_SECRETS || '{}' }}
+          TF_VAR_git_credentials: ${{ secrets.GIT_CREDENTIALS || '{}' }}
         run: terraform validate || true
 
       - name: Plan
@@ -89,7 +92,10 @@ jobs:
         env:
           OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
           OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
-          TF_VAR_connection_passwords: ${{ secrets.CONNECTION_PASSWORDS }}
+          TF_VAR_connection_passwords: ${{ secrets.CONNECTION_PASSWORDS || '{}' }}
+          TF_VAR_connection_private_keys: ${{ secrets.CONNECTION_PRIVATE_KEYS || '{}' }}
+          TF_VAR_connection_oauth_secrets: ${{ secrets.CONNECTION_OAUTH_SECRETS || '{}' }}
+          TF_VAR_git_credentials: ${{ secrets.GIT_CREDENTIALS || '{}' }}
         run: |
           set -o pipefail
           terraform plan -no-color -input=false -lock-timeout=5m 2>&1 | tee plan.txt

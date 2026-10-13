@@ -128,6 +128,7 @@ evaluate variable validations; only `plan` does.
 | [docs/TEST-CASES.md](./docs/TEST-CASES.md) | The test case matrix, including every API behaviour that surprised us |
 | [docs/BEHAVIOUR-TESTS.md](./docs/BEHAVIOUR-TESTS.md) | The lifecycle cases a plan cannot prove: rename, re-key, destroy, membership |
 | [docs/API-COVERAGE.md](./docs/API-COVERAGE.md) | Which endpoints are covered and which are not |
+| [docs/MODEL-GIT.md](./docs/MODEL-GIT.md) | Connecting a model to a git repository, including the deploy key |
 | [docs/EMBED-SETUP.md](./docs/EMBED-SETUP.md) | Embed specifics |
 
 ## Setting up CI/CD
@@ -227,8 +228,20 @@ warehouse credentials in plain text.
 | `TF_API_TOKEN` | HCP Terraform token, if using the `cloud` backend |
 | Backend credentials | Whatever your bucket needs, for example `GCP_SA_KEY` or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` |
 
-Warehouse credentials are not in tfvars. They come from `TF_VAR_connection_passwords`,
-`TF_VAR_connection_private_keys` and `TF_VAR_connection_oauth_secrets`, set from secrets in CI.
+Warehouse credentials and git deploy keys are not in tfvars. The workflows pass them as
+`TF_VAR_*` from these secrets, each a JSON object keyed the same as the connection or model:
+
+| Secret | Variable |
+| --- | --- |
+| `CONNECTION_PASSWORDS` | `connection_passwords` |
+| `CONNECTION_PRIVATE_KEYS` | `connection_private_keys` |
+| `CONNECTION_OAUTH_SECRETS` | `connection_oauth_secrets` |
+| `GIT_CREDENTIALS` | `git_credentials` |
+
+Each is passed as `${{ secrets.NAME || '{}' }}`, and the fallback is load-bearing. An unset secret
+arrives as an empty string, and Terraform parses a `TF_VAR_` value as HCL for any variable that is
+not a string, so an empty one fails the run with "Missing expression" rather than falling back to
+the variable's default. `{}` is a valid empty map, so you only set the secrets you actually use.
 
 Use an **organization API key**, not a personal access token. The SCIM
 endpoints behind `omni_user` and `omni_user_group` reject personal tokens.
@@ -357,6 +370,11 @@ shared folder named after the entity. Creating one by name over SCIM produces a 
 that merely shares the name. What this provider creates is the non-entity groups that a signed
 URL's `groups` claim resolves to.
 
+**Connection environments cannot be driven from Terraform alone.** `omni_connection_environment`
+routes queries on values of the base connection's environment user attribute, and `omni_connection`
+does not expose that field, so it has to be set in the UI. The API also has no read endpoint for
+connection environments, so drift on them is undetectable.
+
 **Custom roles are referenced by name only.** No role catalogue endpoint was found, so a custom
 role renamed in the UI breaks a grant naming it, and nothing detects that.
 
@@ -375,7 +393,8 @@ left alone.
 ## Roadmap
 
 dbt configuration and dbt environments, email-only users, a `omni_user_attribute_group_allowed_values`
-resource for the group allowed-values endpoint, and data-source-backed references so a deployment
+resource for the group allowed-values endpoint, the base connection's environment user attribute so
+dynamic connections can be configured end to end, and data-source-backed references so a deployment
 can point at objects an existing instance already has.
 
 ## License
