@@ -29,6 +29,8 @@ that layer in the same review process as the rest of your infrastructure.
 | `omni_document_permission`   | `/v1/documents/{id}/permissions`          | Same. `document_id` is a literal ID, since documents are made in the UI       |
 | `omni_label`                 | `/v1/labels`                              |                                                                                |
 | `omni_color_palette`         | `/v1/color-palettes`                      |                                                                                |
+| `omni_user_attribute`        | `/v1/user-attributes`                     | Destroy removes the value every user holds, and breaks model SQL and embed URLs naming it     |
+| `omni_user_attribute_selectable_values` | `/v1/user-attributes/{id}/selectable-values` | Values a user or group may switch to. Takes a membership ID, not a user ID       |
 | `omni_user`                  | `/scim/v2/users`                          | Organization API key required. Create does not adopt an existing account      |
 | `omni_user_group`            | `/scim/v2/groups`                         | Membership is authoritative unless `member_ids` is left unset                 |
 | `omni_user_model_role`       | `/v1/users/{id}/model-roles`              | Destroy downgrades to `NO_ACCESS` (no delete endpoint exists)                 |
@@ -38,7 +40,8 @@ that layer in the same review process as the rest of your infrastructure.
 
 `omni_connection`, `omni_model`, `omni_folder`, `omni_user`, `omni_user_group`,
 `omni_user_attribute` and `omni_user_attributes`. Each looks up by ID or by name, except
-`omni_user_attribute`, which takes exactly one of the two and prefers the ID.
+`omni_user_attribute`, which takes exactly one of the two and prefers the ID. Use the data source
+for an attribute someone made in the UI, and the resource of the same name for one Terraform owns.
 
 ## Quick start
 
@@ -343,11 +346,10 @@ there in another form. Omni resolves roles by priority, so a permissive `base_ro
 connection outranks the downgrade and access survives. Folder and document permissions behave the
 same way.
 
-**User attribute definitions are read-only.** `GET /v1/user-attributes` is the only endpoint;
-definitions are created in the UI. Terraform references them and assigns values. There is also no
-concept of a group-assigned value: a user's value comes from a direct assignment or the
-definition's default, and nothing else. Groups do carry "allowed user attribute values", which is
-the set a member may switch an attribute to, and is a different thing.
+**There is no group-assigned attribute value.** A user's value comes from a direct assignment or
+the definition's default, and nothing else. Groups carry "selectable values", which is the set a
+member may switch an attribute to, and is a different thing: `omni_user_attribute_selectable_values`
+manages it. Definitions themselves are no longer read-only; `omni_user_attribute` creates them.
 
 **Entity embed groups cannot be created.** The Groups settings page has Standard and Embed tabs.
 The Embed tab holds one group per `entity` value, created by the embed session itself along with a

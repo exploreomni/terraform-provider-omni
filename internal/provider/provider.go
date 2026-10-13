@@ -138,6 +138,8 @@ func (p *omniProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 func (p *omniProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewUserResource,
+		NewUserAttributeResource,
+		NewUserAttributeSelectableValuesResource,
 		NewUserGroupResource,
 		NewUserModelRoleResource,
 		NewUserGroupModelRoleResource,

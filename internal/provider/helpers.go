@@ -175,3 +175,28 @@ func setToStrings(ctx context.Context, s types.Set) ([]string, diag.Diagnostics)
 	diags.Append(s.ElementsAs(ctx, &out, false)...)
 	return out, diags
 }
+
+// singleDefault reports a user attribute's default when it has exactly one.
+//
+// A multi-valued attribute has a list, which cannot be rendered as a string
+// without choosing one arbitrarily, so it reports null and the caller reads the
+// list attribute instead.
+func singleDefault(d client.AttributeDefault) types.String {
+	if !d.Set || len(d.Values) != 1 {
+		return types.StringNull()
+	}
+	return types.StringValue(d.Values[0])
+}
+
+// defaultList reports a user attribute's default as a list, whatever its shape.
+// An unset default is a null list rather than an empty one: the two mean
+// different things to the API, which rejects an empty list on a single-valued
+// attribute.
+func defaultList(ctx context.Context, d client.AttributeDefault, diags *diagnostics) types.List {
+	if !d.Set {
+		return types.ListNull(types.StringType)
+	}
+	value, d2 := types.ListValueFrom(ctx, types.StringType, d.Values)
+	diags.Append(d2...)
+	return value
+}

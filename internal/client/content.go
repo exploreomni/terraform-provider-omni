@@ -177,14 +177,14 @@ type ModelInput struct {
 // Settings > User attributes, which means the schema that row-level security
 // keys off cannot be managed as code.
 type UserAttribute struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Label          string  `json:"label"`
-	Description    *string `json:"description"`
-	Type           string  `json:"type"`
-	DefaultValue   *string `json:"default_value"`
-	MultipleValues bool    `json:"multiple_values"`
-	System         bool    `json:"system"`
+	ID             string           `json:"id"`
+	Name           string           `json:"name"`
+	Label          string           `json:"label"`
+	Description    *string          `json:"description"`
+	Type           string           `json:"type"`
+	DefaultValue   AttributeDefault `json:"default_value"`
+	MultipleValues bool             `json:"multiple_values"`
+	System         bool             `json:"system"`
 }
 
 type listUserAttributesResponse struct {
