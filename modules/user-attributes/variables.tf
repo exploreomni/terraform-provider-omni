@@ -1,38 +1,69 @@
 variable "attributes" {
   description = <<-DESC
-    Attribute definitions to reference, as a local key to the definition's ID.
-    Find an ID with:
+    Attribute definitions, keyed by a local name the rest of the configuration
+    references.
 
-      curl -s -H "Authorization: Bearer $OMNI_API_TOKEN" \
-        "$OMNI_BASE_URL/api/v1/user-attributes"
+    existing_id references a definition made elsewhere instead of creating one.
+    Without it the definition is created and label is required; name defaults to
+    the key.
 
-    IDs rather than names on purpose. A definition can be renamed in the UI, and
-    a configuration naming it would stop matching silently.
-
-    The local key is yours and is what var.assignments refers to, so renaming an
-    attribute in Omni changes nothing here.
+    The root module validates the combinations and names the entry at fault;
+    these are the same checks, kept so the module stands on its own.
   DESC
 
-  type    = map(string)
+  type = map(object({
+    # Reference a definition made elsewhere rather than creating one.
+    existing_id = optional(string)
+
+    label           = optional(string)
+    name            = optional(string)
+    type            = optional(string, "String")
+    description     = optional(string)
+    multiple_values = optional(bool, false)
+    default_value   = optional(string)
+    default_values  = optional(list(string))
+  }))
+
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attributes : v.existing_id != null || v.label != null
+    ])
+    error_message = "Every attribute needs existing_id to reference one, or label to create one."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attributes :
+      v.existing_id == null || (v.label == null && v.name == null && v.description == null && v.default_value == null && v.default_values == null)
+    ])
+    error_message = "A referenced attribute already has its label, name and default; Terraform does not change them."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attributes : v.default_value == null || v.default_values == null
+    ])
+    error_message = "Set default_value for one default or default_values for several, not both."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attributes : v.default_values == null || v.multiple_values
+    ])
+    error_message = "default_values needs multiple_values = true; a single-valued attribute holds one default."
+  }
 }
 
 variable "assignments" {
   description = <<-DESC
-    Attribute values per person, as an email to a map of local key to value.
+    Values per person, as an email to a map of keys from var.attributes.
 
-      assignments = {
-        "analyst@acme.com" = {
-          tenant = "acme"
-          region = "AMER"
-        }
-      }
-
-    Every key used here must appear in var.attributes.
-
-    Values are per person. Omni has no API for assigning them to a group: the
-    SCIM group resource has no attribute extension and the only attribute
-    endpoint is a read.
+    Per person because Omni has no group-assigned value: a user's value comes
+    from a direct assignment or the definition's default, and nothing else. The
+    group-scoped control that does exist is var.selectable_values, which is a
+    different thing.
   DESC
 
   type    = map(map(string))

@@ -21,10 +21,12 @@ These cannot be automated today. Do them once per instance.
 off, for example `tenant_id`. Note its **Reference** value, which is what you
 use everywhere else.
 
-The API exposes only `GET /v1/user-attributes`. There is no create endpoint, so
-the schema your entire row-level security depends on is the one part of the
-deployment that cannot be versioned or reviewed. This is the single most
-valuable API gap to close.
+Or create it in Terraform: `omni_user_attribute` landed on 2026-09-21, and
+`var.user_attributes` takes either a definition to create or an `existing_id`
+to reference. Reference an attribute that already has values and filters
+behind it - a destroy takes every user's value with it - and create the ones
+a new instance needs, which is what makes promoting a configuration between
+environments possible at all.
 
 ### 2. Create the embed secret
 

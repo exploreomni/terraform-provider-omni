@@ -173,9 +173,12 @@ type ModelInput struct {
 
 // UserAttribute is a user attribute definition.
 //
-// The API exposes these read-only. Definitions are created in the UI under
-// Settings > User attributes, which means the schema that row-level security
-// keys off cannot be managed as code.
+// Creatable since 2026-09-21. Before that the API exposed these read-only and
+// the schema row-level security keys off could not be managed as code.
+//
+// Reference by ID rather than by name wherever something already depends on
+// the definition: a rename in the UI is invisible to an ID and silently
+// stops a name from matching.
 type UserAttribute struct {
 	ID             string           `json:"id"`
 	Name           string           `json:"name"`
@@ -222,7 +225,7 @@ func (c *Client) FindUserAttributeByID(ctx context.Context, id string) (*UserAtt
 		StatusCode: http.StatusNotFound,
 		Method:     http.MethodGet,
 		Path:       "/v1/user-attributes",
-		Message:    fmt.Sprintf("no user attribute with ID %q. Definitions are created in the UI under Settings > User attributes; the API has no create endpoint", id),
+		Message:    fmt.Sprintf("no user attribute with ID %q. Check Settings > User attributes, or create it with omni_user_attribute rather than referencing it", id),
 	}
 }
 
@@ -240,7 +243,7 @@ func (c *Client) FindUserAttribute(ctx context.Context, name string) (*UserAttri
 		StatusCode: http.StatusNotFound,
 		Method:     http.MethodGet,
 		Path:       "/v1/user-attributes",
-		Message:    fmt.Sprintf("no user attribute named %q. Definitions are created in the UI under Settings > User attributes; the API has no create endpoint", name),
+		Message:    fmt.Sprintf("no user attribute named %q. Check Settings > User attributes, or create it with omni_user_attribute rather than referencing it", name),
 	}
 }
 

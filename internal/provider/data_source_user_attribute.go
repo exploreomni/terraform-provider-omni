@@ -11,10 +11,11 @@ import (
 	"github.com/ashima-omni/terraform-provider-omni/internal/client"
 )
 
-// User attribute definitions are read-only in the API. These data sources exist
-// so a configuration can reference an attribute by name and fail clearly when
-// the target instance does not have it, rather than silently producing a
-// deployment whose row-level security does not work.
+// Definitions can be created as well as read, since 2026-09-21. These data
+// sources are for the ones Terraform should not own: an attribute the UI made
+// before Terraform arrived, or one another team manages. Referencing fails
+// clearly when the target instance does not have it, rather than silently
+// producing a deployment whose row-level security does not work.
 
 // ---------------------------------------------------------------------------
 // omni_user_attribute

@@ -115,16 +115,24 @@ which is the entire value proposition for embed infrastructure as code.
 
 ### Gap 2: user attribute definitions are read-only
 
-`GET /api/v1/user-attributes` is the only method. The response is complete and
-useful, listing id, name, label, type, default value, whether multiple values
-are allowed, and whether the attribute is system defined.
+Closed. `POST`, `PUT` and `DELETE` landed on 2026-09-21, and
+`PUT /api/v1/user-attributes/{id}/selectable-values` on 2026-09-30.
 
-Attribute definitions are what row-level security keys off, and what every
-signed embed URL passes values for. Because they can only be made in the UI, the
-security-critical half of an embed deployment cannot be versioned, reviewed in a
-pull request, or replicated to a new instance. Promoting a configuration between
-environments silently produces an instance where scoping does nothing, because
-the attribute the config references does not exist.
+`GET` lists id, name, label, type, default value, whether multiple values are
+allowed, and whether the attribute is system defined.
+
+This was the most valuable gap on the list. Attribute definitions are what
+row-level security keys off and what every signed embed URL passes values for,
+so while they could only be made in the UI, the security-critical half of an
+embed deployment could not be versioned, reviewed in a pull request, or
+replicated to a new instance: promoting a configuration silently produced an
+instance where scoping did nothing.
+
+Two things the endpoints still do not do. `type` is immutable, so changing it
+is a replacement and a replacement drops every value users hold. And
+selectable-values takes a *membership* ID for a user subject without saying so
+or rejecting a user ID, which means a wrong ID provisions nothing and returns
+success.
 
 The provider mitigates this with a data source that fails at plan time when an
 expected attribute is absent. That converts a silent failure into a loud one,

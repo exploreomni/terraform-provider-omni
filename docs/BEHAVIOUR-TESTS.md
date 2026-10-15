@@ -70,6 +70,42 @@ Change a group's `model_role` from `QUERIER` to `VIEWER`.
 Expect `~ update in-place`, not a replacement. A replacement would mean a window
 with no grant at all, which on a live tenant is an outage.
 
+## 6. Narrowing an attribute to single-valued replaces it
+
+Edit `infra/attributes.auto.tfvars`, on `region`:
+
+    multiple_values = true
+
+Expect `~ update in-place`. Widening is an update: an attribute that holds one
+value can hold several.
+
+Then put it back to `false`.
+
+Expect `-/+ replace`, and a warning naming the attribute and saying every value
+users hold for it is dropped. `type` is immutable and so is this direction, so
+the provider turns the narrowing into a replacement rather than letting the API
+refuse it mid-apply.
+
+An `~ update in-place` here instead means the plan modifier is not firing, and a
+narrowing that looks harmless costs every user their value. That is the whole
+reason the modifier exists, and it has never run.
+
+Do this on `region`, not on `tenant`. Nothing routes on region.
+
+## 7. Removing a selectable-values entry stops the switching
+
+Needs an apply. Remove `analysts-region` from
+`var.attribute_selectable_values` and apply.
+
+Expect a destroy. Then check a member of `Analysts` in the UI: the region
+switcher in the File menu should be gone.
+
+There is no DELETE on this endpoint. The provider writes an empty list with
+`allow_any_value = false` instead, which is how the API expresses no
+provisioning. Same shape as behaviour test 3: Terraform reports a destroy and
+the API performed a write. Worth confirming the write is equivalent, because if
+it is not, removing a grant from configuration leaves it in place.
+
 ## What these cannot cover
 
 Membership authority on a managed group - add a user to a Terraform-managed

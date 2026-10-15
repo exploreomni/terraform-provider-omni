@@ -326,6 +326,28 @@ Regenerate the registry docs after schema changes:
 make docs
 ```
 
+### Checking the configuration without the API
+
+```bash
+scripts/plan-harness.py
+scripts/plan-harness.py --expect-error 'not in var.groups'
+```
+
+`terraform validate` does not evaluate variable validations, and it does not
+evaluate module expressions against real values either. Both gaps have shipped
+bugs from this repository, so the harness closes them: it rewrites `infra/` and
+`modules/` into a configuration with no providers in it - every `omni_*` resource
+becomes a local holding its evaluated body - and plans that against the real
+tfvars.
+
+So the `for_each` filters, the merges, the `coalesce` calls and all the
+validations are evaluated, and `--expect-error` asserts that a bad tfvars fails
+with the message it should. Cycles are caught too, since the module graph
+survives the rewrite.
+
+What it cannot tell you is anything the API decides. A plan here will happily
+create something that already exists; only an apply knows.
+
 ## Publishing to the Terraform Registry
 
 1. Point the module path at the GitHub org that will own the repo: `make rename OWNER=your-org`.
