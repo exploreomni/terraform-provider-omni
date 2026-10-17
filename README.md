@@ -305,6 +305,55 @@ go build ./...
 go test ./internal/...
 ```
 
+### Acceptance tests
+
+The unit tests above cover the client in isolation. The acceptance tests drive
+a real Terraform against a real Omni instance, which is what the Terraform
+Registry's Partner tier inspects and the only way to prove the behaviours where
+the plan and the outcome can disagree.
+
+They need the test dependency, once:
+
+```bash
+go get github.com/hashicorp/terraform-plugin-testing@latest
+go mod tidy
+```
+
+Then:
+
+```bash
+export OMNI_BASE_URL=https://your-test-instance.omniapp.co
+export OMNI_API_TOKEN=...          # must be an organization API key
+make testacc
+```
+
+**Point this at a throwaway instance.** The tests create, update and destroy
+real objects. Everything they make is named `tfacc-<run id>-...`, and a run
+that fails hard leaves some behind:
+
+```bash
+make sweep                          # deletes tfacc-* objects and nothing else
+```
+
+Some cases need something the tests cannot create cheaply, a warehouse
+connection above all. Those read an ID from the environment and **skip** when it
+is absent, so a quiet run is not necessarily a complete one - the nightly
+workflow prints which fixtures were set:
+
+| Variable                   | Used by                                        |
+| -------------------------- | ---------------------------------------------- |
+| `OMNI_TEST_MODEL_ID`       | Role assignment, including the destroy downgrade |
+| `OMNI_TEST_CONNECTION_ID`  | Connection-scoped role assignment                |
+| `OMNI_TEST_MEMBER_USER_ID` | Unmanaged group membership surviving an update   |
+
+`.github/workflows/nightly-acceptance.yml` runs all of this on a schedule,
+sweeping before and after, with a concurrency group so two runs cannot fight
+over one instance.
+
+There is no acceptance case for selectable values on a *user*. The endpoint
+takes a membership ID rather than a user ID and answers 200 either way, so a
+case built on the wrong one would pass while provisioning nothing.
+
 To try the provider against a real instance before it is published, add a dev override to
 `~/.terraformrc`:
 
