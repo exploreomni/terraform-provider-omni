@@ -117,14 +117,56 @@ func (c *Client) ListFolders(ctx context.Context, scope, ownerID string) ([]Fold
 	}
 }
 
-// GetFolder finds a folder by ID. The API has no get-by-id route for folders, so
-// this pages the list endpoint and matches on ID.
+// GetFolder reads a folder by ID.
+//
+// GET /v1/folders/{id} shipped in October 2026. Before it, the only way to see
+// one folder was to page the whole list and scan, which is what
+// findFolderInList below still does - and it stays, as a fallback, for two
+// reasons.
+//
+// An instance that does not have the route answers 404, which is exactly what
+// it answers for a folder that does not exist. Taking that at face value would
+// have Read remove the folder from state, and the next apply would create a
+// second one beside the first. A fallback costs one wasted call on such an
+// instance and nothing at all on a current one.
+//
+// And if the response ever arrives wrapped in an envelope this does not know
+// about, the decode succeeds into an empty struct rather than failing. An
+// empty ID is the tell, and it falls back rather than handing back a folder
+// with no identity.
+//
+// The by-id response carries no scope or ownerId: those live on the
+// permissions endpoint. Both are RequiresReplace on the resource, so letting
+// them come back empty would plan a replacement of a folder that never
+// changed. The values the caller already knew are carried through instead.
+func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
+	var out Folder
+	err := c.Get(ctx, "/v1/folders/"+url.PathEscape(id), nil, &out)
+	switch {
+	case err == nil && out.ID != "":
+		if out.Scope == "" {
+			out.Scope = scope
+		}
+		if out.OwnerID == "" {
+			out.OwnerID = ownerID
+		}
+		return &out, nil
+	case err != nil && !IsNotFound(err):
+		// A real failure: permissions, a timeout, a 5xx. Scanning the list
+		// would almost certainly fail the same way and would bury the reason.
+		return nil, err
+	}
+
+	return c.findFolderInList(ctx, id, scope, ownerID)
+}
+
+// findFolderInList pages /v1/folders and matches on ID.
 //
 // ownerID is only sent for restricted scope, where an organization API key is
 // required to supply it. For organization scope an organization key returns
 // every folder when ownerID is omitted, but filters to a single user's folders
 // when it is present, which would hide the folder we are looking for.
-func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
+func (c *Client) findFolderInList(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
 	if scope != "restricted" {
 		ownerID = ""
 	}
