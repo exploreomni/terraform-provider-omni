@@ -22,6 +22,15 @@ import (
 const (
 	defaultTimeout = 60 * time.Second
 	maxRetries     = 4
+
+	// Rate limiting gets a longer budget than other retryable failures.
+	// Omni's window is a minute; four attempts inside thirty seconds cannot
+	// outlast it, so a request would fail for a reason that was only ever
+	// temporary. Ten attempts with the ceiling below spans the window.
+	maxRateLimitRetries = 10
+
+	// The longest single wait, and the ceiling applied to Retry-After.
+	maxBackoff = 60 * time.Second
 )
 
 // Client talks to a single Omni instance.
@@ -154,9 +163,14 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 	}
 
 	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	var retryAfter time.Duration
+
+	// The condition is re-evaluated each pass, so a 429 part way through a
+	// sequence of 5xx retries extends the budget rather than inheriting the
+	// shorter one.
+	for attempt := 0; attempt <= retryBudget(lastErr); attempt++ {
 		if attempt > 0 {
-			wait := backoff(attempt, lastErr)
+			wait := backoff(attempt, lastErr, retryAfter)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -212,6 +226,12 @@ func (c *Client) Do(ctx context.Context, req Request) error {
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			apiErr.Message = retryAfterMessage(resp, apiErr.Message)
+			// Used as the wait, not just reported. Reading the header into the
+			// message and then sleeping for a guess spends another request on
+			// the same 429.
+			retryAfter = retryAfterDuration(resp)
+		} else {
+			retryAfter = 0
 		}
 		lastErr = apiErr
 
@@ -251,18 +271,53 @@ func retryable(status int) bool {
 	return status == http.StatusTooManyRequests || status >= 500
 }
 
-func backoff(attempt int, lastErr error) time.Duration {
+func retryBudget(lastErr error) int {
+	if IsRateLimited(lastErr) {
+		return maxRateLimitRetries
+	}
+	return maxRetries
+}
+
+func backoff(attempt int, lastErr error, retryAfter time.Duration) time.Duration {
+	// What the server asked for, when it said. Capped, because a header is
+	// input from outside and an hour-long sleep inside an apply is worse than
+	// a failure a person can see.
+	if retryAfter > 0 {
+		if retryAfter > maxBackoff {
+			return maxBackoff
+		}
+		return retryAfter
+	}
+
 	// Omni rate limits at 60 requests/minute, so back off generously on 429.
 	base := time.Duration(math.Pow(2, float64(attempt))) * time.Second
-	if apiErr, ok := lastErr.(*APIError); ok && apiErr.StatusCode == http.StatusTooManyRequests {
+	ceiling := 30 * time.Second
+	if IsRateLimited(lastErr) {
 		if base < 5*time.Second {
 			base = 5 * time.Second
 		}
+		// A minute-long window needs a wait that can reach into it.
+		ceiling = maxBackoff
 	}
-	if base > 30*time.Second {
-		base = 30 * time.Second
+	if base > ceiling {
+		base = ceiling
 	}
 	return base
+}
+
+// retryAfterDuration reads Retry-After as seconds. The HTTP-date form is not
+// handled: Omni sends seconds, and a date would have to be trusted against a
+// clock this process does not control.
+func retryAfterDuration(resp *http.Response) time.Duration {
+	v := resp.Header.Get("Retry-After")
+	if v == "" {
+		return 0
+	}
+	secs, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || secs <= 0 {
+		return 0
+	}
+	return time.Duration(secs) * time.Second
 }
 
 func retryAfterMessage(resp *http.Response, msg string) string {

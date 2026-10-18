@@ -270,3 +270,81 @@ func TestPermitWithoutDirectGrantHasNoRole(t *testing.T) {
 		t.Errorf("Role() = %q, want empty for a permit with no direct grant", permits[0].Role())
 	}
 }
+
+// Retry-After is the wait, not decoration. The old code put the header in the
+// error message and then slept on its own schedule, which for a 429 means
+// spending another request to be told the same thing.
+func TestDoWaitsForRetryAfter(t *testing.T) {
+	var calls int
+	var gap time.Duration
+	var first time.Time
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls == 1 {
+			first = time.Now()
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"message":"slow down"}`))
+			return
+		}
+		gap = time.Since(first)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"connection":{"id":"abc"}}`))
+	}))
+	defer server.Close()
+
+	c := testClient(t, server.URL)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if _, err := c.GetConnection(ctx, "abc"); err != nil {
+		t.Fatalf("GetConnection returned an error: %v", err)
+	}
+
+	// At least the two seconds asked for. Without the header the first retry
+	// waits five, so a test that only checked "waited a while" would pass on
+	// the old behaviour too; the upper bound is what makes this meaningful.
+	if gap < 2*time.Second {
+		t.Errorf("waited %v before retrying, want at least the 2s Retry-After asked for", gap)
+	}
+	if gap > 4*time.Second {
+		t.Errorf("waited %v before retrying, want about the 2s Retry-After asked for, not the default backoff", gap)
+	}
+}
+
+// A 429 gets more attempts than a 5xx, because the window it is waiting out
+// is a minute long.
+func TestRetryBudgetIsLongerForRateLimits(t *testing.T) {
+	rateLimited := &APIError{StatusCode: http.StatusTooManyRequests}
+	serverError := &APIError{StatusCode: http.StatusBadGateway}
+
+	if got := retryBudget(rateLimited); got != maxRateLimitRetries {
+		t.Errorf("retryBudget(429) = %d, want %d", got, maxRateLimitRetries)
+	}
+	if got := retryBudget(serverError); got != maxRetries {
+		t.Errorf("retryBudget(502) = %d, want %d", got, maxRetries)
+	}
+	if got := retryBudget(nil); got != maxRetries {
+		t.Errorf("retryBudget(nil) = %d, want %d", got, maxRetries)
+	}
+}
+
+// The ceiling applies to the header too: it is input from outside, and an
+// apply that sleeps for an hour is worse than one that fails where someone
+// can see it.
+func TestBackoffCapsRetryAfter(t *testing.T) {
+	rateLimited := &APIError{StatusCode: http.StatusTooManyRequests}
+
+	if got := backoff(1, rateLimited, time.Hour); got != maxBackoff {
+		t.Errorf("backoff with an hour-long Retry-After = %v, want %v", got, maxBackoff)
+	}
+	if got := backoff(1, rateLimited, 3*time.Second); got != 3*time.Second {
+		t.Errorf("backoff with a 3s Retry-After = %v, want 3s", got)
+	}
+	// No header: the 429 floor still applies.
+	if got := backoff(1, rateLimited, 0); got < 5*time.Second {
+		t.Errorf("backoff for a 429 with no header = %v, want at least 5s", got)
+	}
+}
