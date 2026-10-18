@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -38,15 +39,10 @@ const (
 	// Every object these tests make is named with this prefix, so a sweeper
 	// can find the leftovers of a failed run and nothing else.
 	accPrefix = "tfacc-"
-
-	// Objects older than this are fair game for a sweeper. A run in progress
-	// on the same instance must not have its objects deleted underneath it,
-	// and the nightly workflow serialises runs for the same reason.
-	accSweepAge = 4 * time.Hour
 )
 
 var (
-	// One ID per run, so two runs against one instance cannot collide on a
+	// One token per run, so two runs against one instance cannot collide on a
 	// name, and so a leftover is traceable to the run that made it.
 	accRunID     string
 	accRunIDOnce sync.Once
@@ -54,19 +50,54 @@ var (
 
 func runID() string {
 	accRunIDOnce.Do(func() {
-		if id := os.Getenv("GITHUB_RUN_ID"); id != "" {
-			accRunID = id
+		if id, err := strconv.ParseInt(os.Getenv("GITHUB_RUN_ID"), 10, 64); err == nil {
+			accRunID = shortToken(id)
 			return
 		}
-		accRunID = fmt.Sprintf("%d", time.Now().UnixNano())
+		accRunID = shortToken(time.Now().UnixNano())
 	})
 	return accRunID
 }
 
+// shortToken is base 36 and at most six characters, because of accNameLimit
+// below: a nanosecond timestamp is nineteen digits and spends the whole
+// budget on its own.
+//
+// Six base-36 characters is about two billion values, taken from the low end
+// of the timestamp where the digits move fastest, so two runs would have to
+// start within microseconds of each other to collide.
+func shortToken(n int64) string {
+	if n < 0 {
+		n = -n
+	}
+	s := strconv.FormatInt(n, 36)
+	if len(s) > 6 {
+		s = s[len(s)-6:]
+	}
+	return s
+}
+
+// The tightest name limit in the provider is a label's, at 25 characters.
+// Rather than special-casing labels, every generated name fits in 25.
+const accNameLimit = 25
+
 // accName builds a name that is unique to this run and recognisable to the
 // sweeper. Omni names are visible to people, so they say what they are.
+//
+// "tfacc-" plus a six-character token plus a separator is 13, which leaves 12
+// for the suffix. Going over is a mistake in the test rather than a failure
+// worth reporting through the API, so it stops here with a message saying
+// what to do, instead of surfacing as "Invalid Attribute Value Length" on a
+// name nobody chose by hand.
 func accName(suffix string) string {
-	return fmt.Sprintf("%s%s-%s", accPrefix, runID(), suffix)
+	name := fmt.Sprintf("%s%s-%s", accPrefix, runID(), suffix)
+	if len(name) > accNameLimit {
+		panic(fmt.Sprintf(
+			"acceptance test name %q is %d characters and the limit is %d (a label's). Shorten the suffix to %d characters or fewer.",
+			name, len(name), accNameLimit, accNameLimit-len(accPrefix)-len(runID())-1,
+		))
+	}
+	return name
 }
 
 var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
@@ -135,8 +166,14 @@ func resourcesOfType(state *terraform.State, typeName string) []*terraform.Resou
 //
 // An acceptance test that fails mid-run leaves objects behind, and on a shared
 // instance those accumulate until something collides with them. `go test
-// ./internal/provider/ -sweep=all` deletes anything named with accPrefix and
-// older than accSweepAge.
+// ./internal/provider/ -sweep=all` deletes anything named with accPrefix.
+//
+// By prefix, not by age. A label and a user attribute carry no creation time
+// in the API, so a sweeper cannot tell a leftover from something a run
+// created a second ago. What keeps a sweep from deleting a live run's objects
+// is the concurrency group in the nightly workflow, which is the only thing
+// that does - so do not run a sweep against an instance someone else is
+// testing on.
 //
 // Only objects whose names carry the prefix. A sweeper that deletes by type
 // would empty a real instance the first time someone ran it against the wrong

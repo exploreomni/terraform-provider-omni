@@ -65,7 +65,7 @@ func TestAccUserGroup_basic(t *testing.T) {
 // emptied the group. It needs a real user to be meaningful, so it skips
 // without one: an empty group would pass whether or not the bug were back.
 func TestAccUserGroup_unmanagedMembershipSurvivesUpdate(t *testing.T) {
-	name := accName("group-unmanaged")
+	name := accName("group-unmgd")
 	memberID := requireEnv(t, "OMNI_TEST_MEMBER_USER_ID")
 
 	resource.Test(t, resource.TestCase{
