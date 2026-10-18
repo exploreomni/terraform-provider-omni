@@ -345,10 +345,19 @@ workflow prints which fixtures were set:
 | `OMNI_TEST_MODEL_ID`       | Role assignment, including the destroy downgrade |
 | `OMNI_TEST_CONNECTION_ID`  | Connection-scoped role assignment                |
 | `OMNI_TEST_MEMBER_USER_ID` | Unmanaged group membership surviving an update   |
+| `OMNI_TEST_GROUP_UUID`     | Group selectable values (see below)               |
 
 `.github/workflows/nightly-acceptance.yml` runs all of this on a schedule,
 sweeping before and after, with a concurrency group so two runs cannot fight
 over one instance.
+
+`OMNI_TEST_GROUP_UUID` is a group's UUID primary key, which no endpoint
+returns - every group-scoped endpoint except this one takes the eight-character
+id SCIM reports. Finding 43 has the detail; `select id, mini_uuid, name from
+user_groups` is the reliable way to get one, and the group's own page in Omni
+carries it if the database is out of reach. Confirm a UUID before using it: the
+endpoint answers 200 for any group in the organization, so a wrong one
+provisions the wrong people rather than failing.
 
 There is no acceptance case for selectable values on a *user*. The endpoint
 takes a membership ID rather than a user ID and answers 200 either way, so a

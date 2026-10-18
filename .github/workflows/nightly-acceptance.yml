@@ -44,6 +44,10 @@ jobs:
       OMNI_TEST_CONNECTION_ID: ${{ secrets.OMNI_TEST_CONNECTION_ID }}
       OMNI_TEST_MODEL_ID: ${{ secrets.OMNI_TEST_MODEL_ID }}
       OMNI_TEST_MEMBER_USER_ID: ${{ secrets.OMNI_TEST_MEMBER_USER_ID }}
+      # A group's UUID primary key, which no endpoint returns - see finding 43.
+      # Without it the selectable-values case skips, so the one behaviour this
+      # provider cannot express without a manual lookup goes untested nightly.
+      OMNI_TEST_GROUP_UUID: ${{ secrets.OMNI_TEST_GROUP_UUID }}
 
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +102,7 @@ jobs:
         run: |
           {
             echo "### Fixtures"
-            for v in OMNI_TEST_CONNECTION_ID OMNI_TEST_MODEL_ID OMNI_TEST_MEMBER_USER_ID; do
+            for v in OMNI_TEST_CONNECTION_ID OMNI_TEST_MODEL_ID OMNI_TEST_MEMBER_USER_ID OMNI_TEST_GROUP_UUID; do
               if [ -n "${!v}" ]; then echo "- \`$v\` set"; else echo "- \`$v\` **unset**, cases needing it were skipped"; fi
             done
           } >> "$GITHUB_STEP_SUMMARY"
