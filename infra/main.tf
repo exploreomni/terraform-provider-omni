@@ -227,15 +227,18 @@ module "content_access" {
 module "selectable_values" {
   source = "../modules/selectable-values"
 
-  # The group_ids lookup below implies this only while the map is non-empty;
-  # stated here it holds even when it is empty.
+  # The user_ids lookup below implies this only while a user entry exists;
+  # stated here it holds for a configuration with none.
   depends_on = [module.access]
 
   provisions = {
     for k, v in var.attribute_selectable_values : k => {
       user_attribute_id = module.user_attributes.ids[v.attribute]
 
-      group_id = v.group == null ? null : module.access.group_ids[v.group]
+      # A literal UUID, not module.access.group_ids. That map holds the
+      # eight-character id SCIM reports, which every other endpoint takes and
+      # this one rejects. Finding 43.
+      group_id = v.group_uuid
 
       # The endpoint wants the user's membership ID. omni_user.id is the handle
       # the provider reads a user by, which is membership-scoped, so it is very

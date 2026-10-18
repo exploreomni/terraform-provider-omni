@@ -60,26 +60,44 @@ user_attribute_values = {
 # group is handing its members other tenants' rows, since the access filters
 # route on exactly that attribute. Nothing routes on region, so getting this
 # wrong costs nothing.
-# Empty, and not for want of trying. The entry below is what this should say,
-# and it fails at apply with "group_id: Invalid UUID".
+# Values a group may switch an attribute to.
 #
-# The endpoint resolves group_id against the group's UUID primary key. SCIM,
-# model roles, connection roles and folder permissions all use the group's
-# eight-character mini_uuid instead - that is what omni_user_group.id holds,
-# and what every other part of this configuration passes around. The two
-# columns are generated independently, so the mini cannot be converted, and no
-# endpoint returns the UUID: /v1/user-groups does not exist, SCIM reports the
-# mini as "id", and /v1/user-groups/{id}/model-roles echoes the mini back.
+# Not an assignment: this is the set a member can switch between from the File
+# menu, and their actual value still comes from the assignment above or the
+# definition's default.
 #
-# Tracked as finding 43. Uncomment once an endpoint exposes the UUID, or once
-# this endpoint accepts the same id as its neighbours.
+# On "region" rather than "tenant" on purpose. Provisioning tenant values to a
+# group is handing its members other tenants' rows, since the access filters
+# route on exactly that attribute. Nothing routes on region, so getting this
+# wrong costs nothing.
 attribute_selectable_values = {
-  # "analysts-region" = {
-  #   attribute       = "region"
-  #   group           = "analysts"
-  #   values          = ["anz", "apac", "emea"]
-  #   allow_any_value = false
-  # }
+  "analysts-region" = {
+    attribute = "region"
+
+    # The Analysts group, by UUID rather than by a key from var.groups.
+    #
+    # This endpoint is the only one in the API that identifies a group by its
+    # UUID primary key; model roles, connection roles, folder and document
+    # permissions and SCIM all take the eight-character mini_uuid, which is
+    # what omni_user_group.id holds. The two are generated independently and
+    # nothing converts between them, so this cannot be a reference. Finding 43.
+    #
+    # Where this came from: the UUID appears on /groups/Vcf6fCLU/Analysts and
+    # on no other page in the instance, it is absent from the Connection
+    # Admins page, and a GET of this endpoint with it answers 200. Omni's
+    # mini_uuid for the same group is Vcf6fCLU.
+    #
+    # It belongs to the group row. Destroying and recreating Analysts makes it
+    # stale, and the apply then fails with a 404 rather than provisioning
+    # something unnoticed.
+    group_uuid = "5a7b9d67-cd43-4724-a9cd-30bf1bbbd847"
+
+    values = ["anz", "apac", "emea"]
+
+    # The narrow option. True would let members switch to any value at all,
+    # which on an attribute something routes on is an unbounded grant.
+    allow_any_value = false
+  }
 
   # No user entry yet. The endpoint takes the user's *membership* ID, which is
   # not the user ID, and it does not say which one it got: a wrong ID

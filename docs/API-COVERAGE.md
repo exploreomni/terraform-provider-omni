@@ -226,6 +226,13 @@ Both documents are internally consistent and disagree with each other: this
 endpoint's README calls the field "User group id" and uses a UUID in every
 example, while SCIM calls the mini "id".
 
+The UUID is findable, which makes this survivable rather than fatal: it
+appears in the group's own settings pages and nowhere else in the instance, so
+comparing two group pages identifies it, and a `GET` of this endpoint with it
+answers 200 for a real group. That is a one-off manual step per group, it goes
+stale if the group is recreated, and it is not something a customer should be
+asked to do.
+
 **Needed:** one of - `selectable-values` accepts the `mini_uuid` like its
 neighbours, SCIM returns the UUID alongside it, or `GET /api/v1/user-groups`
 exists and returns both.
