@@ -60,16 +60,26 @@ user_attribute_values = {
 # group is handing its members other tenants' rows, since the access filters
 # route on exactly that attribute. Nothing routes on region, so getting this
 # wrong costs nothing.
+# Empty, and not for want of trying. The entry below is what this should say,
+# and it fails at apply with "group_id: Invalid UUID".
+#
+# The endpoint resolves group_id against the group's UUID primary key. SCIM,
+# model roles, connection roles and folder permissions all use the group's
+# eight-character mini_uuid instead - that is what omni_user_group.id holds,
+# and what every other part of this configuration passes around. The two
+# columns are generated independently, so the mini cannot be converted, and no
+# endpoint returns the UUID: /v1/user-groups does not exist, SCIM reports the
+# mini as "id", and /v1/user-groups/{id}/model-roles echoes the mini back.
+#
+# Tracked as finding 43. Uncomment once an endpoint exposes the UUID, or once
+# this endpoint accepts the same id as its neighbours.
 attribute_selectable_values = {
-  "analysts-region" = {
-    attribute = "region"
-    group     = "analysts"
-    values    = ["anz", "apac", "emea"]
-
-    # The narrow option. True would let members switch to any value at all,
-    # which on an attribute something routes on is an unbounded grant.
-    allow_any_value = false
-  }
+  # "analysts-region" = {
+  #   attribute       = "region"
+  #   group           = "analysts"
+  #   values          = ["anz", "apac", "emea"]
+  #   allow_any_value = false
+  # }
 
   # No user entry yet. The endpoint takes the user's *membership* ID, which is
   # not the user ID, and it does not say which one it got: a wrong ID

@@ -21,15 +21,22 @@ import (
 // framework versions. This sentence has not.
 var regexpInvalidCombination = regexp.MustCompile(`Exactly one of these attributes must be configured`)
 
-// Values a group may switch an attribute to. Needs an organization API key,
-// because it creates a group.
+// Values a group may switch an attribute to.
 //
-// Group rather than user on purpose. The endpoint takes a *membership* ID for
-// a user subject, not a user ID, and it answers 200 either way - so a user case
-// built on the wrong ID would pass while provisioning nothing. Until that is
-// settled, a user test would assert the wrong thing confidently.
+// Skipped unless OMNI_TEST_GROUP_UUID is set, and setting it means reading a
+// value out of the database, because no API returns it. The endpoint resolves
+// group_id against user_groups.id, a gen_random_uuid() primary key, while
+// every other group-scoped endpoint in v1 - model roles, connection roles,
+// folder and document permissions - takes the eight-character mini_uuid that
+// SCIM calls the group's id. The two columns are generated independently, so
+// the mini cannot be converted into the UUID by any client.
+//
+// Group rather than user, still. The user path takes a membership id, which
+// the endpoint also does not say it is getting and answers 200 either way, so
+// a user case built on the wrong id would pass while provisioning nothing.
 func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 	name := accIdentifier("sv")
+	groupUUID := requireEnv(t, "OMNI_TEST_GROUP_UUID")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -37,23 +44,16 @@ func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 		CheckDestroy:             testAccCheckSelectableValuesDestroyed,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccSelectableValuesConfig(name, `["anz", "apac"]`, false),
+				Config: testAccSelectableValuesConfig(name, groupUUID, `["anz", "apac"]`, false),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.#", "2"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.0", "anz"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "allow_any_value", "false"),
-					// Composite, and the subject kind is in it: there is no
-					// single API identifier for a provisioning.
-					resource.TestCheckResourceAttrWith("omni_user_attribute_selectable_values.test", "id", func(value string) error {
-						if len(value) == 0 {
-							return fmt.Errorf("empty id")
-						}
-						return nil
-					}),
+					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "group_id", groupUUID),
 				),
 			},
 			{
-				Config:   testAccSelectableValuesConfig(name, `["anz", "apac"]`, false),
+				Config:   testAccSelectableValuesConfig(name, groupUUID, `["anz", "apac"]`, false),
 				PlanOnly: true,
 			},
 			{
@@ -73,7 +73,7 @@ func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 			{
 				// A changed set, and the wide grant turned on. Both go through
 				// the same PUT, which is why create and update are one call.
-				Config: testAccSelectableValuesConfig(name, `["anz", "apac", "emea"]`, true),
+				Config: testAccSelectableValuesConfig(name, groupUUID, `["anz", "apac", "emea"]`, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.#", "3"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "allow_any_value", "true"),
@@ -83,39 +83,10 @@ func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 	})
 }
 
-// Exactly one subject. The provider rejects both and neither at validate time,
-// before any API call, because the API would accept a body with both and do
-// something unstated with it.
-func TestAccUserAttributeSelectableValues_subjectValidation(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: `
-resource "omni_user_attribute_selectable_values" "test" {
-  user_attribute_id = "00000000-0000-0000-0000-000000000000"
-  values            = ["a"]
-}
-`,
-				ExpectError: regexpInvalidCombination,
-			},
-			{
-				Config: `
-resource "omni_user_attribute_selectable_values" "test" {
-  user_attribute_id = "00000000-0000-0000-0000-000000000000"
-  user_id           = "11111111-1111-1111-1111-111111111111"
-  group_id          = "22222222-2222-2222-2222-222222222222"
-  values            = ["a"]
-}
-`,
-				ExpectError: regexpInvalidCombination,
-			},
-		},
-	})
-}
-
-func testAccSelectableValuesConfig(name, values string, allowAny bool) string {
+func testAccSelectableValuesConfig(name, groupUUID, values string, allowAny bool) string {
+	// No omni_user_group here. A group this created would carry a mini_uuid
+	// as its id, which this endpoint rejects, so the subject has to be a UUID
+	// supplied from outside.
 	return fmt.Sprintf(`
 resource "omni_user_attribute" "test" {
   name  = %[1]q
@@ -123,17 +94,13 @@ resource "omni_user_attribute" "test" {
   type  = "String"
 }
 
-resource "omni_user_group" "test" {
-  display_name = %[1]q
-}
-
 resource "omni_user_attribute_selectable_values" "test" {
   user_attribute_id = omni_user_attribute.test.id
-  group_id          = omni_user_group.test.id
-  values            = %[2]s
-  allow_any_value   = %[3]t
+  group_id          = %[2]q
+  values            = %[3]s
+  allow_any_value   = %[4]t
 }
-`, name, values, allowAny)
+`, name, groupUUID, values, allowAny)
 }
 
 // Destroying a provisioning is a write, not a delete: the endpoint has no

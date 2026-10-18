@@ -208,6 +208,28 @@ access**. It only works if the connection's base role is already `NO_ACCESS`.
 
 **Needed:** `DELETE` on both model-roles endpoints.
 
+### Gap 6b: a group cannot be a selectable-values subject
+
+`PUT /api/v1/user-attributes/{id}/selectable-values` takes `group_id` as the
+group's UUID primary key. Every other group-scoped endpoint - model roles,
+connection roles, folder and document permissions, SCIM - uses the group's
+eight-character `mini_uuid`, a separately generated column rather than an
+encoding of the UUID.
+
+No endpoint returns the UUID. `GET /api/v1/user-groups` does not exist, SCIM
+reports the `mini_uuid` as the group's `id`, and
+`GET /api/v1/user-groups/{id}/model-roles` echoes the `mini_uuid` back in its
+own `userGroupId` field. A group subject therefore cannot be addressed from
+the API at all, by any client.
+
+Both documents are internally consistent and disagree with each other: this
+endpoint's README calls the field "User group id" and uses a UUID in every
+example, while SCIM calls the mini "id".
+
+**Needed:** one of - `selectable-values` accepts the `mini_uuid` like its
+neighbours, SCIM returns the UUID alongside it, or `GET /api/v1/user-groups`
+exists and returns both.
+
 ### Gap 7: custom roles have no API
 
 Searching the spec for `role`, `permission`, `grant` and `privilege` returns

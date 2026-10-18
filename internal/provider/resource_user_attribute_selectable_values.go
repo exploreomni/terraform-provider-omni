@@ -84,8 +84,14 @@ func (r *selectableValuesResource) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"group_id": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "The group to provision for, from `omni_user_group.id`. Exactly one of " +
-					"`user_id` or `group_id`.",
+				MarkdownDescription: "The group to provision for. **Not `omni_user_group.id`.** This endpoint " +
+					"wants the group's UUID primary key, while SCIM - and every other group-scoped endpoint " +
+					"in the API, including model roles and folder permissions - uses an eight-character " +
+					"`mini_uuid` as the group's id. The two are generated independently, so one cannot be " +
+					"derived from the other, and no API returns the UUID. Passing a `mini_uuid` here fails " +
+					"with `group_id: Invalid UUID`.\n\n" +
+					"Until an endpoint exposes it, a group subject needs a UUID obtained some other way. " +
+					"Exactly one of `user_id` or `group_id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"values": schema.ListAttribute{
