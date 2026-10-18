@@ -348,3 +348,83 @@ func TestBackoffCapsRetryAfter(t *testing.T) {
 		t.Errorf("backoff for a 429 with no header = %v, want at least 5s", got)
 	}
 }
+
+// Importing a folder reads it by id, and that response carries no ownerId.
+// The list does carry it - as a nested object, not a flat field - so this
+// asserts the fallback resolves the shape it actually gets. The first attempt
+// copied OwnerID from the list result, which is always empty there, so the
+// fallback ran, found the folder, and returned nothing useful.
+func TestGetFolderRecoversOwnerFromListShape(t *testing.T) {
+	var byID, list int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/folders/f1":
+			byID++
+			w.WriteHeader(http.StatusOK)
+			// As the by-id endpoint answers: no ownerId, no scope.
+			_, _ = w.Write([]byte(`{"id":"f1","name":"Hub","path":"hub","url":"https://x/hub"}`))
+		case "/api/v1/folders":
+			list++
+			w.WriteHeader(http.StatusOK)
+			// As the list answers: the owner as a nested object.
+			_, _ = w.Write([]byte(`{"records":[{"id":"f1","name":"Hub","scope":"organization","owner":{"id":"owner-uuid","name":"Ashima"}}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	c := testClient(t, server.URL)
+
+	folder, err := c.GetFolder(context.Background(), "f1", "", "")
+	if err != nil {
+		t.Fatalf("GetFolder returned an error: %v", err)
+	}
+	if folder.OwnerID != "owner-uuid" {
+		t.Errorf("owner id = %q, want %q", folder.OwnerID, "owner-uuid")
+	}
+	if folder.Scope != "organization" {
+		t.Errorf("scope = %q, want organization (recovered from the list)", folder.Scope)
+	}
+	if folder.Path != "hub" {
+		t.Errorf("path = %q, want hub (from the by-id read)", folder.Path)
+	}
+	if byID != 1 || list != 1 {
+		t.Errorf("calls: by-id %d, list %d; want exactly one of each", byID, list)
+	}
+}
+
+// The caller's own value wins, and costs no extra call. This is the steady
+// state: Read passes what state already holds, so a read of an owned folder
+// is one request, not two.
+func TestGetFolderKeepsKnownOwnerWithoutScanning(t *testing.T) {
+	var list int
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/folders" {
+			list++
+		}
+		if r.URL.Path == "/api/v1/folders/f1" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"f1","name":"Hub","path":"hub"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"records":[]}`))
+	}))
+	defer server.Close()
+
+	c := testClient(t, server.URL)
+
+	folder, err := c.GetFolder(context.Background(), "f1", "organization", "known-owner")
+	if err != nil {
+		t.Fatalf("GetFolder returned an error: %v", err)
+	}
+	if folder.OwnerID != "known-owner" {
+		t.Errorf("owner id = %q, want the caller's known-owner", folder.OwnerID)
+	}
+	if list != 0 {
+		t.Errorf("list endpoint called %d times, want 0: the owner was already known", list)
+	}
+}

@@ -21,6 +21,18 @@ type Folder struct {
 	URL            string       `json:"url,omitempty"`
 }
 
+// ownerIdentifier is the owner's id from whichever shape the response used:
+// ownerId on a create or by-id read, a nested owner object on a list.
+func (f *Folder) ownerIdentifier() string {
+	if f.OwnerID != "" {
+		return f.OwnerID
+	}
+	if f.Owner != nil {
+		return f.Owner.ID
+	}
+	return ""
+}
+
 // FolderOwner is the owner block returned by the list endpoint.
 type FolderOwner struct {
 	ID   string `json:"id"`
@@ -162,7 +174,13 @@ func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Fol
 		// alternative is a resource whose import is quietly wrong.
 		if out.OwnerID == "" {
 			if full, scanErr := c.findFolderInList(ctx, id, out.Scope, ""); scanErr == nil {
-				out.OwnerID = full.OwnerID
+				// The list reports the owner as a nested object and the create
+				// response reports it as ownerId. Take whichever arrived: the
+				// first version of this copied only OwnerID, which is always
+				// empty in a list response, so it fetched the right folder and
+				// dropped the one field it came for.
+				out.Owner = full.Owner
+				out.OwnerID = full.ownerIdentifier()
 				if out.Scope == "" {
 					out.Scope = full.Scope
 				}
