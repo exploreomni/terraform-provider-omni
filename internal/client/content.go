@@ -150,6 +150,24 @@ func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Fol
 		if out.OwnerID == "" {
 			out.OwnerID = ownerID
 		}
+
+		// An import has no prior state, so there is nothing to carry through
+		// and ownerId is left empty - which on a RequiresReplace attribute
+		// reads as a change. The list endpoint does return it, so recover it
+		// from there rather than letting import produce a plan that replaces
+		// the folder it has just adopted.
+		//
+		// Only when both are empty, which outside import means a folder that
+		// genuinely has no owner. That costs a list scan per read, and the
+		// alternative is a resource whose import is quietly wrong.
+		if out.OwnerID == "" {
+			if full, scanErr := c.findFolderInList(ctx, id, out.Scope, ""); scanErr == nil {
+				out.OwnerID = full.OwnerID
+				if out.Scope == "" {
+					out.Scope = full.Scope
+				}
+			}
+		}
 		return &out, nil
 	case err != nil && !IsNotFound(err):
 		// A real failure: permissions, a timeout, a 5xx. Scanning the list
