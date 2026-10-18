@@ -14,7 +14,12 @@ import (
 
 // What resourcevalidator.ExactlyOneOf reports when user_id and group_id are
 // both set or both absent.
-var regexpInvalidCombination = regexp.MustCompile(`Invalid Attribute Combination`)
+//
+// Matched on the detail rather than the summary: the two cases get different
+// summaries - "Missing Attribute Configuration" for neither and "Invalid
+// Attribute Combination" for both - and the summaries have changed between
+// framework versions. This sentence has not.
+var regexpInvalidCombination = regexp.MustCompile(`Exactly one of these attributes must be configured`)
 
 // Values a group may switch an attribute to. Needs an organization API key,
 // because it creates a group.
@@ -24,7 +29,7 @@ var regexpInvalidCombination = regexp.MustCompile(`Invalid Attribute Combination
 // built on the wrong ID would pass while provisioning nothing. Until that is
 // settled, a user test would assert the wrong thing confidently.
 func TestAccUserAttributeSelectableValues_group(t *testing.T) {
-	name := accName("sv")
+	name := accIdentifier("sv")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },

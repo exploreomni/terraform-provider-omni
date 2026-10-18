@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -19,7 +20,7 @@ import (
 // neither may turn into a replacement, because a replacement drops every value
 // users hold for the attribute.
 func TestAccUserAttribute_basic(t *testing.T) {
-	name := accName("attr")
+	name := accIdentifier("attr")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -76,7 +77,7 @@ func TestAccUserAttribute_basic(t *testing.T) {
 // surface warnings, so this asserts the action and not the text; read the
 // warning by hand once while running this.
 func TestAccUserAttribute_multipleValuesNarrowingReplaces(t *testing.T) {
-	name := accName("attr-multi")
+	name := accIdentifier("attr-multi")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -117,7 +118,7 @@ func TestAccUserAttribute_multipleValuesNarrowingReplaces(t *testing.T) {
 // type is immutable, so changing it is a replacement rather than an API error
 // mid-apply.
 func TestAccUserAttribute_typeReplaces(t *testing.T) {
-	name := accName("attr-type")
+	name := accIdentifier("attr-type")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -144,7 +145,7 @@ func TestAccUserAttribute_typeReplaces(t *testing.T) {
 // precision past 2^53 - 1. A float64 round trip would turn the value below
 // into ...992, so this is the regression test for finding 37.
 func TestAccUserAttribute_numberDefaultKeepsPrecision(t *testing.T) {
-	name := accName("attr-bignum")
+	name := accIdentifier("attr-bignum")
 	const big = "9007199254740993"
 
 	resource.Test(t, resource.TestCase{
@@ -174,6 +175,43 @@ resource "omni_user_attribute" "test" {
 }
 `, name, big),
 				PlanOnly: true,
+			},
+		},
+	})
+}
+
+// The reference name is rejected at plan time rather than by the API.
+//
+// Both cases here were found by an acceptance run: the harness generated
+// "tfacc-...-attr" and the apply failed on a 400 whose message came from
+// Omni. The rule was in the schema description the whole time and nothing
+// enforced it.
+func TestAccUserAttribute_nameValidation(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// A hyphen is the usual mistake: it is legal in the label and
+				// in every other name in this provider.
+				Config: `
+resource "omni_user_attribute" "test" {
+  name  = "has-a-hyphen"
+  label = "Has a hyphen"
+  type  = "String"
+}
+`,
+				ExpectError: regexp.MustCompile(`Invalid user attribute name`),
+			},
+			{
+				Config: `
+resource "omni_user_attribute" "test" {
+  name  = "omni_reserved"
+  label = "Reserved"
+  type  = "String"
+}
+`,
+				ExpectError: regexp.MustCompile(`Reserved user attribute name`),
 			},
 		},
 	})

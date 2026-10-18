@@ -36,9 +36,16 @@ import (
 //	OMNI_TEST_MEMBER_USER_ID  an existing user, for membership assertions
 
 const (
-	// Every object these tests make is named with this prefix, so a sweeper
-	// can find the leftovers of a failed run and nothing else.
-	accPrefix = "tfacc-"
+	// Every object these tests make starts with this, so a sweeper can find
+	// the leftovers of a failed run and nothing else.
+	//
+	// No separator on the end: names come in two shapes, because a user
+	// attribute's reference name may not contain a hyphen. Matching the bare
+	// prefix catches both tfacc-... and tfacc_... .
+	accPrefix = "tfacc"
+
+	// What accName puts between the parts. A reference name uses "_".
+	accSep = "-"
 )
 
 var (
@@ -90,14 +97,25 @@ const accNameLimit = 25
 // what to do, instead of surfacing as "Invalid Attribute Value Length" on a
 // name nobody chose by hand.
 func accName(suffix string) string {
-	name := fmt.Sprintf("%s%s-%s", accPrefix, runID(), suffix)
+	name := fmt.Sprintf("%s%s%s%s%s", accPrefix, accSep, runID(), accSep, suffix)
 	if len(name) > accNameLimit {
 		panic(fmt.Sprintf(
 			"acceptance test name %q is %d characters and the limit is %d (a label's). Shorten the suffix to %d characters or fewer.",
-			name, len(name), accNameLimit, accNameLimit-len(accPrefix)-len(runID())-1,
+			name, len(name), accNameLimit, accNameLimit-len(accPrefix)-len(runID())-2,
 		))
 	}
 	return name
+}
+
+// accIdentifier is accName for a user attribute's reference name, which is
+// what model SQL and embed URLs use: it must start with a letter and hold
+// only letters, numbers and underscores, so the hyphens become underscores.
+//
+// The label is the human-facing string and has no such restriction. Getting
+// these two the wrong way round is the mistake the provider now catches at
+// plan time rather than at apply.
+func accIdentifier(suffix string) string {
+	return fmt.Sprintf("%s_%s_%s", accPrefix, runID(), strings.ReplaceAll(suffix, "-", "_"))
 }
 
 var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
