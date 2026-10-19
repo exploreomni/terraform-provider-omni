@@ -40,7 +40,7 @@ resource "omni_folder" "monthly_reporting" {
 - `parent_folder_id` (String) ID of the parent folder. Omit for a top-level folder.
 - `path` (String) URL path segment for the folder. Lowercased by the API, and limited to alphanumeric characters and dashes. Changing it updates every descendant folder path.
 
-No `UseStateForUnknown` here on purpose: renaming a parent rewrites every descendant's path server side, so a child's path cannot be assumed to survive an update unchanged.
+  No `UseStateForUnknown` here on purpose: renaming a parent rewrites every descendant's path server side, so a child's path cannot be assumed to survive an update unchanged.
 - `resolve_path_conflict` (Boolean) When `true`, path conflicts on update are resolved by appending a numeric suffix instead of returning a conflict error.
 - `scope` (String) Folder scope. Defaults to `organization`, or the parent folder's scope when nested. A child folder's scope must match its parent.
 

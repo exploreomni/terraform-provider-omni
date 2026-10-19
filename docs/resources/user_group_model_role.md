@@ -26,7 +26,7 @@ Assigns a user group's role on a model or connection. Every member of the group 
 - `model_id` (String) The model to grant the role on. Required for every role except `CONNECTION_ADMIN` and custom roles based on it.
 - `role_on_destroy` (String) The Omni API has no endpoint for removing a role assignment, so destroying this resource downgrades the role to this value instead. Defaults to `NO_ACCESS`.
 
-Be aware that `NO_ACCESS` does not necessarily revoke access. Omni resolves roles by priority, and a direct assignment sits at priority 0 while the connection's base role sits higher. If the connection grants `QUERIER` to everyone, a destroyed assignment leaves the subject with `QUERIER`, not no access. Set the connection's `base_role` to `NO_ACCESS` if you need destroy to actually remove access.
+  Be aware that `NO_ACCESS` does not necessarily revoke access. Omni resolves roles by priority, and a direct assignment sits at priority 0 while the connection's base role sits higher. If the connection grants `QUERIER` to everyone, a destroyed assignment leaves the subject with `QUERIER`, not no access. Set the connection's `base_role` to `NO_ACCESS` if you need destroy to actually remove access.
 
 ### Read-Only
 

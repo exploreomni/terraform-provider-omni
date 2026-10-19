@@ -40,14 +40,14 @@ resource "omni_model" "finance_extension" {
 - `model_kind` (String) The kind of model to create. Defaults to `SHARED_EXTENSION`.
 - `name` (String) The model name. Must be unique among active models with the same kind and base model.
 
-Optional because Omni names some models itself. A `SCHEMA` model is named after its connection whatever you ask for, so leave this unset on one: setting it produces "Provider produced inconsistent result after apply", since a provider may not return a value that contradicts the configuration.
+  Optional because Omni names some models itself. A `SCHEMA` model is named after its connection whatever you ask for, so leave this unset on one: setting it produces "Provider produced inconsistent result after apply", since a provider may not return a value that contradicts the configuration.
 
-Renaming is an in-place update, not a replacement.
+  Renaming is an in-place update, not a replacement.
 - `refresh_on_create` (Boolean) Start a schema refresh once the model is created. Defaults to `true` for a `SCHEMA` model and `false` otherwise.
 
-Creating a `SCHEMA` model registers it; introspecting the warehouse is a separate call, and the UI's "Build Schema" button does both. Without the refresh the model exists but has no tables, so anything built on it sees nothing.
+  Creating a `SCHEMA` model registers it; introspecting the warehouse is a separate call, and the UI's "Build Schema" button does both. Without the refresh the model exists but has no tables, so anything built on it sees nothing.
 
-This only applies at create time: changing it later has no effect, and a failed refresh is reported as a warning rather than failing the apply, since the model itself was created.
+  This only applies at create time: changing it later has no effect, and a failed refresh is reported as a warning rather than failing the apply, since the model itself was created.
 - `uses_isolated_branches` (Boolean) For `SHARED_EXTENSION` models, show branches on the extension model page rather than the parent shared model. Set at creation only.
 
 ### Read-Only

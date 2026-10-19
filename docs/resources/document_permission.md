@@ -28,7 +28,7 @@ The documents API has no endpoint for revoking a permission, so destroying this 
 - `access_boost` (Boolean) Whether to grant access boost alongside the role. Rejected with 403 when the organization has AccessBoost turned off.
 - `user_group_ids` (Set of String) User group IDs granted this role. Authoritative for this resource. For embed, this is usually what you want: the `groups` claim in a signed URL resolves to these groups.
 
-Use the ID from `omni_user_group`, which is the SCIM miniUuid. Reading permissions back requires an extra lookup per group, because the permissions endpoint reports a group's full UUID instead and the two cannot be compared directly.
+  Use the ID from `omni_user_group`, which is the SCIM miniUuid. Reading permissions back requires an extra lookup per group, because the permissions endpoint reports a group's full UUID instead and the two cannot be compared directly.
 - `user_ids` (Set of String) User IDs granted this role. Authoritative for this resource: a user removed from the set has the grant revoked.
 
 ### Read-Only

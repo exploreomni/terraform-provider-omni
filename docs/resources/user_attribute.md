@@ -29,19 +29,19 @@ Omni's own attributes (`omni_user_id`, `omni_user_email` and the rest) are syste
 - `label` (String) Display name shown in the Omni UI. Unique among custom attributes. Must not start with `Omni`, and must not be one of the reserved connection labels: `Host`, `Password`, `Database`, `Port`, `Schema`, `Connection Name`.
 - `name` (String) Reference name used in model SQL and in embed SSO URL parameters. Must start with a letter, hold only letters, numbers and underscores, and must not start with `omni_`.
 
-Renaming is allowed and happens in place, but every reference to the old name breaks: model SQL, embed URLs and anything else naming it. Terraform cannot see those, so a rename here is a change to make deliberately.
+  Renaming is allowed and happens in place, but every reference to the old name breaks: model SQL, embed URLs and anything else naming it. Terraform cannot see those, so a rename here is a change to make deliberately.
 - `type` (String) `String` or `Number`. Immutable: changing it replaces the attribute, which destroys every user's value for it.
 
 ### Optional
 
 - `default_value` (String) Value used when a user has none set, for a single-valued attribute. Conflicts with `default_values`.
 
-A `Number` attribute takes its default here as a string, which is how Omni stores numbers so that values beyond 2^53 - 1 keep their precision.
+  A `Number` attribute takes its default here as a string, which is how Omni stores numbers so that values beyond 2^53 - 1 keep their precision.
 - `default_values` (List of String) Values used when a user has none set, for an attribute with `multiple_values = true`. Conflicts with `default_value`.
 - `description` (String) What the attribute is for. An empty string is stored as null.
 - `multiple_values` (Boolean) Whether the attribute holds more than one value per user.
 
-`false` to `true` is an update. `true` to `false` is not: the API refuses it, so Terraform replaces the attribute instead, which destroys every user's value. The plan shows that replacement rather than failing during apply.
+  `false` to `true` is an update. `true` to `false` is not: the API refuses it, so Terraform replaces the attribute instead, which destroys every user's value. The plan shows that replacement rather than failing during apply.
 
 ### Read-Only
 
