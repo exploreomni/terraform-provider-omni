@@ -28,7 +28,7 @@ fmt:
 	terraform fmt -recursive ./examples/
 
 docs:
-	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate
+	go tool tfplugindocs generate
 
 # Point the module path at your own GitHub org before publishing, e.g.
 #   make rename OWNER=my-org
