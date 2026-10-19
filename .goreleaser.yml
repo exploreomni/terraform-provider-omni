@@ -37,6 +37,12 @@ checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
   algorithm: sha256
 
+  # The registry requires a SHA-256 entry for the manifest as well as for each
+  # zip, and refuses a version whose checksums file is missing one.
+  extra_files:
+    - glob: "terraform-registry-manifest.json"
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
 signs:
   - artifacts: checksum
     args:
@@ -51,6 +57,14 @@ signs:
 
 release:
   draft: false
+
+  # The manifest is a required release asset, under this exact name. Without
+  # it the registry rejects the version: it is what declares the protocol
+  # version, and Terraform has no other way to learn it before downloading a
+  # binary.
+  extra_files:
+    - glob: "terraform-registry-manifest.json"
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
 
 changelog:
   disable: true
