@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/ashima-omni/terraform-provider-omni/internal/client"
+	"github.com/exploreomni/terraform-provider-omni/internal/client"
 )
 
 // Create, read with no drift, import, and update in place.

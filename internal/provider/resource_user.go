@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/ashima-omni/terraform-provider-omni/internal/client"
+	"github.com/exploreomni/terraform-provider-omni/internal/client"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/ashima-omni/terraform-provider-omni/internal/provider"
+	"github.com/exploreomni/terraform-provider-omni/internal/provider"
 )
 
 // version is set at build time by GoReleaser.
@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/ashima-omni/omni",
+		Address: "registry.terraform.io/exploreomni/omni",
 		Debug:   debug,
 	}
 

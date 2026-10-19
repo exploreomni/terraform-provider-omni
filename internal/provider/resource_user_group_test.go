@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/ashima-omni/terraform-provider-omni/internal/client"
+	"github.com/exploreomni/terraform-provider-omni/internal/client"
 )
 
 // Requires an organization API key: groups go through SCIM.

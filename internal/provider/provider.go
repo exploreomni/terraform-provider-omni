@@ -12,7 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/ashima-omni/terraform-provider-omni/internal/client"
+	"github.com/exploreomni/terraform-provider-omni/internal/client"
 )
 
 // Ensure the provider satisfies the framework interfaces.

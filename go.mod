@@ -1,4 +1,4 @@
-module github.com/ashima-omni/terraform-provider-omni
+module github.com/exploreomni/terraform-provider-omni
 
 go 1.25.8
 

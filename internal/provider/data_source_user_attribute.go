@@ -8,7 +8,7 @@ import (
 	dschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/ashima-omni/terraform-provider-omni/internal/client"
+	"github.com/exploreomni/terraform-provider-omni/internal/client"
 )
 
 // Definitions can be created as well as read, since 2026-09-21. These data

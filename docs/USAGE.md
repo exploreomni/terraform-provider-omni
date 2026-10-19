@@ -64,7 +64,7 @@ Best for iterating. Terraform uses your locally built binary and skips
 installation entirely.
 
 ```bash
-git clone https://github.com/ashima-omni/terraform-provider-omni.git
+git clone https://github.com/exploreomni/terraform-provider-omni.git
 cd terraform-provider-omni
 go build ./... && go install .
 go env GOPATH        # note the path
