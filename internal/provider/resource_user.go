@@ -63,7 +63,7 @@ func (r *userResource) Schema(_ context.Context, _ resource.SchemaRequest, resp 
 				ElementType: types.StringType,
 				MarkdownDescription: "User attributes as key/value pairs. Keys are the **Reference** values from " +
 					"**Settings > User attributes**. Only the keys declared here are tracked; attributes set " +
-					"elsewhere are left alone.\n\n" +
+					"elsewhere are left alone.\n\n  " +
 					"Do not declare Omni's built-in attributes, such as those prefixed `omni_`. The platform " +
 					"populates them and does not return them as user attributes, so Terraform will propose " +
 					"setting them on every plan.",

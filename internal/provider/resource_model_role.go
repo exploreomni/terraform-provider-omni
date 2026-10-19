@@ -78,7 +78,7 @@ func modelRoleAttributes(subjectAttr, subjectDescription string) map[string]sche
 			Computed: true,
 			Default:  stringdefault.StaticString("NO_ACCESS"),
 			MarkdownDescription: "The Omni API has no endpoint for removing a role assignment, so destroying " +
-				"this resource downgrades the role to this value instead. Defaults to `NO_ACCESS`.\n\n" +
+				"this resource downgrades the role to this value instead. Defaults to `NO_ACCESS`.\n\n  " +
 				"Be aware that `NO_ACCESS` does not necessarily revoke access. Omni resolves roles by " +
 				"priority, and a direct assignment sits at priority 0 while the connection's base role sits " +
 				"higher. If the connection grants `QUERIER` to everyone, a destroyed assignment leaves the " +

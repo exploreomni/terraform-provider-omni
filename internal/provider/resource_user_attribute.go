@@ -124,7 +124,7 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 				Required: true,
 				MarkdownDescription: "Reference name used in model SQL and in embed SSO URL parameters. Must " +
 					"start with a letter, hold only letters, numbers and underscores, and must not start " +
-					"with `omni_`.\n\n" +
+					"with `omni_`.\n\n  " +
 					"Renaming is allowed and happens in place, but every reference to the old name breaks: " +
 					"model SQL, embed URLs and anything else naming it. Terraform cannot see those, so a " +
 					"rename here is a change to make deliberately.",
@@ -155,7 +155,7 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
-				MarkdownDescription: "Whether the attribute holds more than one value per user.\n\n" +
+				MarkdownDescription: "Whether the attribute holds more than one value per user.\n\n  " +
 					"`false` to `true` is an update. `true` to `false` is not: the API refuses it, so " +
 					"Terraform replaces the attribute instead, which destroys every user's value. The plan " +
 					"shows that replacement rather than failing during apply.",
@@ -164,7 +164,7 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 			"default_value": schema.StringAttribute{
 				Optional: true,
 				MarkdownDescription: "Value used when a user has none set, for a single-valued attribute. " +
-					"Conflicts with `default_values`.\n\n" +
+					"Conflicts with `default_values`.\n\n  " +
 					"A `Number` attribute takes its default here as a string, which is how Omni stores " +
 					"numbers so that values beyond 2^53 - 1 keep their precision.",
 			},

@@ -64,11 +64,11 @@ func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 				Optional: true,
 				Computed: true,
 				MarkdownDescription: "The model name. Must be unique among active models with the same kind " +
-					"and base model.\n\n" +
+					"and base model.\n\n  " +
 					"Optional because Omni names some models itself. A `SCHEMA` model is named after " +
 					"its connection whatever you ask for, so leave this unset on one: setting it " +
 					"produces \"Provider produced inconsistent result after apply\", since a provider " +
-					"may not return a value that contradicts the configuration.\n\n" +
+					"may not return a value that contradicts the configuration.\n\n  " +
 					"Renaming is an in-place update, not a replacement.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -112,11 +112,11 @@ func (r *modelResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"refresh_on_create": schema.BoolAttribute{
 				Optional: true,
 				MarkdownDescription: "Start a schema refresh once the model is created. " +
-					"Defaults to `true` for a `SCHEMA` model and `false` otherwise.\n\n" +
+					"Defaults to `true` for a `SCHEMA` model and `false` otherwise.\n\n  " +
 					"Creating a `SCHEMA` model registers it; introspecting the warehouse is a " +
 					"separate call, and the UI's \"Build Schema\" button does both. Without the " +
 					"refresh the model exists but has no tables, so anything built on it sees " +
-					"nothing.\n\n" +
+					"nothing.\n\n  " +
 					"This only applies at create time: changing it later has no effect, and a " +
 					"failed refresh is reported as a warning rather than failing the apply, " +
 					"since the model itself was created.",
