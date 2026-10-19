@@ -128,6 +128,7 @@ evaluate variable validations; only `plan` does.
 | [docs/TEST-CASES.md](./docs/TEST-CASES.md) | The test case matrix, including every API behaviour that surprised us |
 | [docs/BEHAVIOUR-TESTS.md](./docs/BEHAVIOUR-TESTS.md) | The lifecycle cases a plan cannot prove: rename, re-key, destroy, membership |
 | [docs/API-COVERAGE.md](./docs/API-COVERAGE.md) | Which endpoints are covered and which are not |
+| [docs/SCIM-COEXISTENCE.md](./docs/SCIM-COEXISTENCE.md) | Running this alongside an identity provider that provisions users over SCIM |
 | [docs/MODEL-GIT.md](./docs/MODEL-GIT.md) | Connecting a model to a git repository, including the deploy key |
 | [docs/EMBED-SETUP.md](./docs/EMBED-SETUP.md) | Embed specifics |
 
