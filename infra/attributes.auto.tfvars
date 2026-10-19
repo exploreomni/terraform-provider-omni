@@ -99,11 +99,20 @@ attribute_selectable_values = {
     allow_any_value = false
   }
 
-  # No user entry yet. The endpoint takes the user's *membership* ID, which is
-  # not the user ID, and it does not say which one it got: a wrong ID
-  # provisions nothing and returns success. Whether omni_user.id is the right
-  # handle is untested, so the group path goes first and a user entry waits
-  # until there is something to compare against.
+  # The user path, which took a while to establish. omni_user.id is the
+  # membership ID the endpoint wants: SCIM is keyed by membership, so the id
+  # the provider already holds is the right one. The User row's id - what a
+  # colliding create names in its 409, and what a folder's owner_id holds - is
+  # a different UUID and this endpoint 404s on it.
+  #
+  # Narrow on purpose: one value, the one already assigned above, so switching
+  # changes nothing. The point is to prove the path works, not to widen access.
+  "ashima-region" = {
+    attribute       = "region"
+    user            = "ashima@omni.co"
+    values          = ["apac"]
+    allow_any_value = false
+  }
 }
 
 # The attribute embed scoping keys off, by name. Set tenant_attribute_id to

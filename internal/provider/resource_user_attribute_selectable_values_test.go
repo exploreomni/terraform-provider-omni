@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -31,9 +32,9 @@ var regexpInvalidCombination = regexp.MustCompile(`Exactly one of these attribut
 // SCIM calls the group's id. The two columns are generated independently, so
 // the mini cannot be converted into the UUID by any client.
 //
-// Group rather than user, still. The user path takes a membership id, which
-// the endpoint also does not say it is getting and answers 200 either way, so
-// a user case built on the wrong id would pass while provisioning nothing.
+// The user path is covered separately below, and needs its own fixture for
+// the opposite reason: a group's UUID is unobtainable, while a user's
+// membership id is simply not something a test can create.
 func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 	name := accIdentifier("sv")
 	groupUUID := requireEnv(t, "OMNI_TEST_GROUP_UUID")
@@ -78,6 +79,61 @@ func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.#", "3"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "allow_any_value", "true"),
 				),
+			},
+		},
+	})
+}
+
+// The user path, with the membership id supplied from the environment.
+//
+// OMNI_TEST_MEMBER_USER_ID is the same value the group membership case uses: a
+// user's id as SCIM reports it, which is the membership id this endpoint wants.
+// The test cannot make its own subject - omni_user is a real seat, and it
+// cannot adopt an account that already exists.
+func TestAccUserAttributeSelectableValues_user(t *testing.T) {
+	name := accIdentifier("sv-user")
+	membershipID := requireEnv(t, "OMNI_TEST_MEMBER_USER_ID")
+
+	config := fmt.Sprintf(`
+resource "omni_user_attribute" "test" {
+  name  = %[1]q
+  label = "Acc Selectable User"
+  type  = "String"
+}
+
+resource "omni_user_attribute_selectable_values" "test" {
+  user_attribute_id = omni_user_attribute.test.id
+  user_id           = %[2]q
+  values            = ["anz"]
+}
+`, name, membershipID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckSelectableValuesDestroyed,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.#", "1"),
+					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "user_id", membershipID),
+					// The composite id carries the subject kind, so this also
+					// asserts a user subject is not recorded as a group one.
+					resource.TestCheckResourceAttrWith("omni_user_attribute_selectable_values.test", "id", func(value string) error {
+						if !strings.Contains(value, ":user:") {
+							return fmt.Errorf("id %q does not identify a user subject", value)
+						}
+						return nil
+					}),
+				),
+			},
+			{
+				// The read-back is the real assertion. A wrong id provisions
+				// nothing and still answers 200, so only a plan that comes back
+				// empty proves the write landed on this subject.
+				Config:   config,
+				PlanOnly: true,
 			},
 		},
 	})

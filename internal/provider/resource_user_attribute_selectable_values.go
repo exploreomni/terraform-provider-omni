@@ -76,10 +76,15 @@ func (r *selectableValuesResource) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"user_id": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "The user to provision for. **This is the membership ID, not the user " +
-					"ID.** The two are different values and the API does not say which one it received, " +
-					"so passing a user ID here provisions nothing and reports success. Exactly one of " +
-					"`user_id` or `group_id`.",
+				MarkdownDescription: "The user to provision for, from `omni_user.id`.\n\n" +
+					"The API documents this as \"the membership id, not the user id\", which reads as a " +
+					"warning against the id Terraform holds. It is not: a person in Omni has a User row " +
+					"and a Membership row with different UUIDs, and SCIM - which is what `omni_user` " +
+					"reads and writes - is keyed by the membership. So `omni_user.id` is the right " +
+					"handle. Confirmed against a live instance; see finding 38.\n\n" +
+					"The User id is the one a colliding create reports in its 409 and the one a folder's " +
+					"`owner_id` holds. This endpoint rejects it with a 404. Exactly one of `user_id` or " +
+					"`group_id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"group_id": schema.StringAttribute{

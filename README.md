@@ -344,7 +344,7 @@ workflow prints which fixtures were set:
 | -------------------------- | ---------------------------------------------- |
 | `OMNI_TEST_MODEL_ID`       | Role assignment, including the destroy downgrade |
 | `OMNI_TEST_CONNECTION_ID`  | Connection-scoped role assignment                |
-| `OMNI_TEST_MEMBER_USER_ID` | Unmanaged group membership surviving an update   |
+| `OMNI_TEST_MEMBER_USER_ID` | Unmanaged group membership, and user selectable values |
 | `OMNI_TEST_GROUP_UUID`     | Group selectable values (see below)               |
 
 `.github/workflows/nightly-acceptance.yml` runs all of this on a schedule,
@@ -359,9 +359,12 @@ carries it if the database is out of reach. Confirm a UUID before using it: the
 endpoint answers 200 for any group in the organization, so a wrong one
 provisions the wrong people rather than failing.
 
-There is no acceptance case for selectable values on a *user*. The endpoint
-takes a membership ID rather than a user ID and answers 200 either way, so a
-case built on the wrong one would pass while provisioning nothing.
+`OMNI_TEST_MEMBER_USER_ID` is a user's id as SCIM reports it. That is the
+membership id, which is what the selectable-values endpoint wants for a user
+subject - the endpoint's own documentation says "not the user id", which reads
+as a warning against this value and is not one. A person has a User row and a
+Membership row with different UUIDs; `omni_user` is SCIM, so it holds the
+membership. Finding 38.
 
 To try the provider against a real instance before it is published, add a dev override to
 `~/.terraformrc`:
