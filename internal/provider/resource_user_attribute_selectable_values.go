@@ -76,16 +76,27 @@ func (r *selectableValuesResource) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"user_id": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "The user to provision for. **This is the membership ID, not the user " +
-					"ID.** The two are different values and the API does not say which one it received, " +
-					"so passing a user ID here provisions nothing and reports success. Exactly one of " +
-					"`user_id` or `group_id`.",
+				MarkdownDescription: "The user to provision for, from `omni_user.id`.\n\n  " +
+					"The API documents this as \"the membership id, not the user id\", which reads as a " +
+					"warning against the id Terraform holds. It is not: a person in Omni has a User row " +
+					"and a Membership row with different UUIDs, and SCIM - which is what `omni_user` " +
+					"reads and writes - is keyed by the membership. So `omni_user.id` is the right " +
+					"handle. Confirmed against a live instance; see finding 38.\n\n  " +
+					"The User id is the one a colliding create reports in its 409 and the one a folder's " +
+					"`owner_id` holds. This endpoint rejects it with a 404. Exactly one of `user_id` or " +
+					"`group_id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"group_id": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "The group to provision for, from `omni_user_group.id`. Exactly one of " +
-					"`user_id` or `group_id`.",
+				MarkdownDescription: "The group to provision for. **Not `omni_user_group.id`.** This endpoint " +
+					"wants the group's UUID primary key, while SCIM - and every other group-scoped endpoint " +
+					"in the API, including model roles and folder permissions - uses an eight-character " +
+					"`mini_uuid` as the group's id. The two are generated independently, so one cannot be " +
+					"derived from the other, and no API returns the UUID. Passing a `mini_uuid` here fails " +
+					"with `group_id: Invalid UUID`.\n\n  " +
+					"Until an endpoint exposes it, a group subject needs a UUID obtained some other way. " +
+					"Exactly one of `user_id` or `group_id`.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"values": schema.ListAttribute{
@@ -93,7 +104,7 @@ func (r *selectableValuesResource) Schema(_ context.Context, _ resource.SchemaRe
 				ElementType: types.StringType,
 				MarkdownDescription: "Values the subject may switch to, validated against the attribute's " +
 					"type: a `Number` attribute rejects a value that is not numeric. Numbers are given as " +
-					"strings to keep precision beyond 2^53 - 1.\n\n" +
+					"strings to keep precision beyond 2^53 - 1.\n\n  " +
 					"At most 300 values of up to 512 characters. For a larger set, use `allow_any_value`.",
 				Validators: []validator.List{
 					listvalidator.SizeAtMost(300),

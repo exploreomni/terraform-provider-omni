@@ -92,10 +92,11 @@ module "schema_refresh" {
   }
 }
 
-# User attribute values. Definitions are read-only in the API and made in the
-# UI; this resolves them by ID and turns the values into the shape the access
-# module wants. Values are per person: Omni has no API for assigning them to a
-# group.
+# User attribute definitions, and the value each person holds.
+#
+# Upstream of modules/access, which sets those values on its users. The values a
+# subject may switch to are a separate layer further down, after the groups
+# exist.
 module "user_attributes" {
   source = "../modules/user-attributes"
 
@@ -149,8 +150,9 @@ module "access" {
 # may need one without the others.
 # --------------------------------------------------------------------------
 
-# The attribute tenant scoping keys off. Looked up rather than created:
-# definitions cannot be made through the API.
+# The attribute tenant scoping keys off. Looked up rather than created: this
+# one predates Terraform, and re-creating the attribute an access filter keys
+# off would put every user's value behind a destroy.
 #
 # Nothing consumes this. It is an existence check: embed scoping silently
 # filters nothing if the attribute is missing, and a failed data source read at
@@ -212,6 +214,41 @@ module "content_access" {
       group_ids    = [for g in v.groups : module.access.group_ids[g]]
       user_ids     = v.user_ids
       access_boost = v.access_boost
+    }
+  }
+}
+
+# Values a user or group may switch an attribute to. Last, because an entry
+# names both an attribute and a group: downstream of the definitions above and
+# of the group layer.
+#
+# Not an assignment, and not a harmless one. A provisioned value is usually
+# readable rows, so keep the lists to what the subject should see.
+module "selectable_values" {
+  source = "../modules/selectable-values"
+
+  # The user_ids lookup below implies this only while a user entry exists;
+  # stated here it holds for a configuration with none.
+  depends_on = [module.access]
+
+  provisions = {
+    for k, v in var.attribute_selectable_values : k => {
+      user_attribute_id = module.user_attributes.ids[v.attribute]
+
+      # A literal UUID, not module.access.group_ids. That map holds the
+      # eight-character id SCIM reports, which every other endpoint takes and
+      # this one rejects. Finding 43.
+      group_id = v.group_uuid
+
+      # The endpoint wants the user's membership ID. omni_user.id is the handle
+      # the provider reads a user by, which is membership-scoped, so it is very
+      # likely the same value - but the API does not say which one it received,
+      # and a wrong one provisions nothing and reports success. Unproven: use a
+      # group until a user entry has been seen working.
+      user_id = v.user == null ? null : module.access.user_ids[v.user]
+
+      values          = v.values
+      allow_any_value = v.allow_any_value
     }
   }
 }

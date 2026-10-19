@@ -128,6 +128,7 @@ evaluate variable validations; only `plan` does.
 | [docs/TEST-CASES.md](./docs/TEST-CASES.md) | The test case matrix, including every API behaviour that surprised us |
 | [docs/BEHAVIOUR-TESTS.md](./docs/BEHAVIOUR-TESTS.md) | The lifecycle cases a plan cannot prove: rename, re-key, destroy, membership |
 | [docs/API-COVERAGE.md](./docs/API-COVERAGE.md) | Which endpoints are covered and which are not |
+| [docs/SCIM-COEXISTENCE.md](./docs/SCIM-COEXISTENCE.md) | Running this alongside an identity provider that provisions users over SCIM |
 | [docs/MODEL-GIT.md](./docs/MODEL-GIT.md) | Connecting a model to a git repository, including the deploy key |
 | [docs/EMBED-SETUP.md](./docs/EMBED-SETUP.md) | Embed specifics |
 
@@ -305,6 +306,67 @@ go build ./...
 go test ./internal/...
 ```
 
+### Acceptance tests
+
+The unit tests above cover the client in isolation. The acceptance tests drive
+a real Terraform against a real Omni instance, which is what the Terraform
+Registry's Partner tier inspects and the only way to prove the behaviours where
+the plan and the outcome can disagree.
+
+They need the test dependency, once:
+
+```bash
+go get github.com/hashicorp/terraform-plugin-testing@latest
+go mod tidy
+```
+
+Then:
+
+```bash
+export OMNI_BASE_URL=https://your-test-instance.omniapp.co
+export OMNI_API_TOKEN=...          # must be an organization API key
+make testacc
+```
+
+**Point this at a throwaway instance.** The tests create, update and destroy
+real objects. Everything they make is named `tfacc-<run id>-...`, and a run
+that fails hard leaves some behind:
+
+```bash
+make sweep                          # deletes tfacc-* objects and nothing else
+```
+
+Some cases need something the tests cannot create cheaply, a warehouse
+connection above all. Those read an ID from the environment and **skip** when it
+is absent, so a quiet run is not necessarily a complete one - the nightly
+workflow prints which fixtures were set:
+
+| Variable                   | Used by                                        |
+| -------------------------- | ---------------------------------------------- |
+| `OMNI_TEST_MODEL_ID`       | Role assignment, including the destroy downgrade |
+| `OMNI_TEST_CONNECTION_ID`  | Connection-scoped role assignment                |
+| `OMNI_TEST_MEMBER_USER_ID` | Unmanaged group membership, and user selectable values |
+| `OMNI_TEST_GROUP_UUID`     | Group selectable values (see below)               |
+
+`.github/workflows/nightly-acceptance.yml` runs all of this on a schedule,
+sweeping before and after, with a concurrency group so two runs cannot fight
+over one instance.
+
+`OMNI_TEST_GROUP_UUID` is a group's UUID primary key, which no endpoint
+returns - every group-scoped endpoint except this one takes the eight-character
+id SCIM reports. Finding 43 has the detail; `select id, mini_uuid, name from
+user_groups` is the reliable way to get one, and the group's own page in Omni
+carries it if the database is out of reach. Confirm a UUID before using it: the
+endpoint answers 200 for any group in the organization, so a wrong one
+provisions the wrong people rather than failing.
+
+`OMNI_TEST_MEMBER_USER_ID` is a user's id as SCIM reports it. That is the
+membership id, which is what the selectable-values endpoint wants for a user
+subject - the endpoint's own documentation says "not the user id", which reads
+as a warning against this value and is not one. A person has a User row and a
+Membership row with different UUIDs; `omni_user` is SCIM, so it holds the
+membership. Finding 38.
+
 To try the provider against a real instance before it is published, add a dev override to
 `~/.terraformrc`:
 
@@ -325,6 +387,28 @@ Regenerate the registry docs after schema changes:
 ```bash
 make docs
 ```
+
+### Checking the configuration without the API
+
+```bash
+scripts/plan-harness.py
+scripts/plan-harness.py --expect-error 'not in var.groups'
+```
+
+`terraform validate` does not evaluate variable validations, and it does not
+evaluate module expressions against real values either. Both gaps have shipped
+bugs from this repository, so the harness closes them: it rewrites `infra/` and
+`modules/` into a configuration with no providers in it - every `omni_*` resource
+becomes a local holding its evaluated body - and plans that against the real
+tfvars.
+
+So the `for_each` filters, the merges, the `coalesce` calls and all the
+validations are evaluated, and `--expect-error` asserts that a bad tfvars fails
+with the message it should. Cycles are caught too, since the module graph
+survives the rewrite.
+
+What it cannot tell you is anything the API decides. A plan here will happily
+create something that already exists; only an apply knows.
 
 ## Publishing to the Terraform Registry
 

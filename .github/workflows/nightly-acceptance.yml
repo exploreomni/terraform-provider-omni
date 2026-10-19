@@ -1,0 +1,108 @@
+name: nightly acceptance
+
+# Nightly acceptance tests against a real Omni instance.
+#
+# These create, update and destroy real objects, so point OMNI_BASE_URL at a
+# throwaway instance and nothing else. Everything is named "tfacc-<run id>-..."
+# and the sweeper steps below delete anything with that prefix.
+#
+# Partner tier on the Terraform Registry requires nightly testing as a GitHub
+# Action, which is the other reason this exists on a schedule rather than being
+# run by hand.
+
+on:
+  schedule:
+    # 14:37 UTC is about 01:37 in Melbourne. Not on the hour: runners are
+    # busiest at :00 and a scheduled run can be delayed by many minutes.
+    - cron: "37 14 * * *"
+  workflow_dispatch:
+    inputs:
+      sweep_only:
+        description: "Only delete leftovers from previous runs, then stop"
+        type: boolean
+        default: false
+
+# One at a time. These tests share an instance, and a second run would sweep
+# the first run's objects out from under it.
+concurrency:
+  group: acceptance-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      OMNI_BASE_URL: ${{ secrets.OMNI_BASE_URL }}
+      OMNI_API_TOKEN: ${{ secrets.OMNI_API_TOKEN }}
+      # Optional fixtures. A case that needs one skips when it is empty
+      # rather than failing the run.
+      OMNI_TEST_CONNECTION_ID: ${{ secrets.OMNI_TEST_CONNECTION_ID }}
+      OMNI_TEST_MODEL_ID: ${{ secrets.OMNI_TEST_MODEL_ID }}
+      OMNI_TEST_MEMBER_USER_ID: ${{ secrets.OMNI_TEST_MEMBER_USER_ID }}
+      # A group's UUID primary key, which no endpoint returns - see finding 43.
+      # Without it the selectable-values case skips, so the one behaviour this
+      # provider cannot express without a manual lookup goes untested nightly.
+      OMNI_TEST_GROUP_UUID: ${{ secrets.OMNI_TEST_GROUP_UUID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The test framework drives a real terraform binary rather than
+      # embedding one, so the run fails at the first step without this.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Check credentials are present
+        run: |
+          if [ -z "$OMNI_BASE_URL" ] || [ -z "$OMNI_API_TOKEN" ]; then
+            echo "OMNI_BASE_URL and OMNI_API_TOKEN must be set as repository secrets." >&2
+            echo "They must be an organization API key: groups and users go through SCIM." >&2
+            exit 1
+          fi
+
+      # Before, not only after. A previous run that failed hard leaves objects
+      # behind, and a name collision would fail this run for the wrong reason.
+      - name: Sweep leftovers from previous runs
+        run: go test ./internal/provider/ -v -sweep=all -timeout 20m
+
+      - name: Stop here if this was a sweep-only run
+        if: inputs.sweep_only
+        run: |
+          echo "Sweep complete, not running tests." >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Acceptance tests
+        if: ${{ !inputs.sweep_only }}
+        env:
+          TF_ACC: "1"
+          # One at a time against one instance. The API allows 60 requests a
+          # minute and these tests are not the only thing using it.
+          TF_ACC_TERRAFORM_VERSION: "1.9.8"
+        run: go test ./internal/provider/ -v -parallel 1 -timeout 60m
+
+      # Always: a failed test run is exactly when objects are left behind.
+      - name: Sweep this run's objects
+        if: always()
+        run: go test ./internal/provider/ -v -sweep=all -timeout 20m
+
+      - name: Note what was skipped
+        if: always()
+        run: |
+          {
+            echo "### Fixtures"
+            for v in OMNI_TEST_CONNECTION_ID OMNI_TEST_MODEL_ID OMNI_TEST_MEMBER_USER_ID OMNI_TEST_GROUP_UUID; do
+              if [ -n "${!v}" ]; then echo "- \`$v\` set"; else echo "- \`$v\` **unset**, cases needing it were skipped"; fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

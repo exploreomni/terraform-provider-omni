@@ -70,7 +70,7 @@ func permissionAttributes(targetAttr, targetDescription string) map[string]schem
 			Optional:    true,
 			ElementType: types.StringType,
 			MarkdownDescription: "User group IDs granted this role. Authoritative for this resource. For embed, " +
-				"this is usually what you want: the `groups` claim in a signed URL resolves to these groups.\n\n" +
+				"this is usually what you want: the `groups` claim in a signed URL resolves to these groups.\n\n  " +
 				"Use the ID from `omni_user_group`, which is the SCIM miniUuid. Reading permissions back " +
 				"requires an extra lookup per group, because the permissions endpoint reports a group's full " +
 				"UUID instead and the two cannot be compared directly.",

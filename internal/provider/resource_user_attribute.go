@@ -2,6 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -16,6 +19,58 @@ import (
 
 	"github.com/ashima-omni/terraform-provider-omni/internal/client"
 )
+
+// The API rejects a malformed reference name with a 400 at apply time. The
+// schema has always documented the rule; nothing checked it, so the first
+// thing to report it was Omni, halfway through an apply, in its own words.
+//
+// Checking here moves it to the plan, names the rule, and says which value
+// broke it. Written by hand rather than as a RegexMatches pair because RE2
+// has no negative lookahead, so "does not start with omni_" is not something
+// a single pattern can say.
+type attributeNameValidator struct{}
+
+var attributeNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
+
+func (attributeNameValidator) Description(_ context.Context) string {
+	return "must start with a letter, hold only letters, numbers and underscores, and must not start with omni_"
+}
+
+func (v attributeNameValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (attributeNameValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	// Null when the configuration leaves name unset, which is allowed: the
+	// attribute is Optional and Computed.
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	name := req.ConfigValue.ValueString()
+
+	if !attributeNamePattern.MatchString(name) {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Invalid user attribute name",
+			fmt.Sprintf(
+				"%q is not a valid reference name. It must start with a letter and hold only letters, "+
+					"numbers and underscores. A hyphen is the usual culprit: this is the name model SQL "+
+					"and embed URLs use, not the label people see, which has no such restriction.",
+				name,
+			),
+		)
+		return
+	}
+
+	// Omni's own namespace.
+	if strings.HasPrefix(strings.ToLower(name), "omni_") {
+		resp.Diagnostics.AddAttributeError(
+			req.Path,
+			"Reserved user attribute name",
+			fmt.Sprintf("%q starts with omni_, which Omni reserves for its own attributes.", name),
+		)
+	}
+}
 
 var (
 	_ resource.Resource                     = &userAttributeResource{}
@@ -69,11 +124,14 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 				Required: true,
 				MarkdownDescription: "Reference name used in model SQL and in embed SSO URL parameters. Must " +
 					"start with a letter, hold only letters, numbers and underscores, and must not start " +
-					"with `omni_`.\n\n" +
+					"with `omni_`.\n\n  " +
 					"Renaming is allowed and happens in place, but every reference to the old name breaks: " +
 					"model SQL, embed URLs and anything else naming it. Terraform cannot see those, so a " +
 					"rename here is a change to make deliberately.",
-				Validators: []validator.String{stringvalidator.LengthAtLeast(1)},
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+					attributeNameValidator{},
+				},
 			},
 			"label": schema.StringAttribute{
 				Required: true,
@@ -97,7 +155,7 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
-				MarkdownDescription: "Whether the attribute holds more than one value per user.\n\n" +
+				MarkdownDescription: "Whether the attribute holds more than one value per user.\n\n  " +
 					"`false` to `true` is an update. `true` to `false` is not: the API refuses it, so " +
 					"Terraform replaces the attribute instead, which destroys every user's value. The plan " +
 					"shows that replacement rather than failing during apply.",
@@ -106,7 +164,7 @@ func (r *userAttributeResource) Schema(_ context.Context, _ resource.SchemaReque
 			"default_value": schema.StringAttribute{
 				Optional: true,
 				MarkdownDescription: "Value used when a user has none set, for a single-valued attribute. " +
-					"Conflicts with `default_values`.\n\n" +
+					"Conflicts with `default_values`.\n\n  " +
 					"A `Number` attribute takes its default here as a string, which is how Omni stores " +
 					"numbers so that values beyond 2^53 - 1 keep their precision.",
 			},

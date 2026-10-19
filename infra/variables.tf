@@ -107,19 +107,214 @@ variable "users" {
 
 variable "user_attributes" {
   description = <<-DESC
-    User attribute definitions to reference, as a local key to the definition's
-    ID. Definitions are read-only in the API and created in the UI under
-    Settings > User attributes. List them with:
+    Attribute definitions, keyed by a local name the rest of this configuration
+    references. An attribute is what an access filter keys off, so this is
+    usually the first thing a row-level security setup needs.
 
-      curl -s -H "Authorization: Bearer $OMNI_API_TOKEN" \
-        "$OMNI_BASE_URL/v1/user-attributes"
+    existing_id references a definition made elsewhere instead of creating one.
+    Use it for anything the UI created before Terraform arrived, and for
+    anything another team owns. Without it the definition is created here and
+    label is required; name defaults to the key.
 
-    IDs rather than names, because a definition can be renamed and a
-    configuration naming it would stop matching in silence.
+    Definitions became creatable on 2026-09-21. Before that this variable held
+    an ID per key and nothing else, because reference was all the API allowed.
+
+    Destroying a definition removes the value every user holds for it, and
+    breaks model SQL and embed SSO URLs that name it. Neither is reported.
   DESC
 
-  type    = map(string)
+  type = map(object({
+    # Reference rather than create. From GET /v1/user-attributes, or the UI.
+    existing_id = optional(string)
+
+    label           = optional(string)
+    name            = optional(string)
+    type            = optional(string, "String")
+    description     = optional(string)
+    multiple_values = optional(bool, false)
+
+    # One default, or several for a multi-valued attribute. A Number attribute
+    # takes its default as a string, which is how Omni stores numbers so that
+    # values beyond 2^53 - 1 keep their precision.
+    default_value  = optional(string)
+    default_values = optional(list(string))
+  }))
+
   default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.user_attributes : v.existing_id != null || v.label != null
+    ])
+    error_message = format(
+      "These attributes neither reference one nor create one: %s. Set existing_id to reference a definition, or label to create it.",
+      join("; ", [
+        for k, v in var.user_attributes : "attribute \"${k}\""
+        if v.existing_id == null && v.label == null
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.user_attributes :
+      v.existing_id == null || (v.label == null && v.name == null && v.description == null && v.default_value == null && v.default_values == null)
+    ])
+    error_message = format(
+      "These attributes set existing_id alongside attributes that only apply to one being created: %s. A referenced definition already has its label, name and default, and Terraform does not change them.",
+      join("; ", [
+        for k, v in var.user_attributes : "attribute \"${k}\""
+        if v.existing_id != null && !(v.label == null && v.name == null && v.description == null && v.default_value == null && v.default_values == null)
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.user_attributes :
+      v.type == null || contains(["String", "Number"], coalesce(v.type, "String"))
+    ])
+    error_message = "type must be String or Number."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.user_attributes : v.default_value == null || v.default_values == null
+    ])
+    error_message = format(
+      "These attributes set both default_value and default_values: %s. The API takes one default whose shape follows multiple_values, so set the single one or the list, not both.",
+      join("; ", [
+        for k, v in var.user_attributes : "attribute \"${k}\""
+        if v.default_value != null && v.default_values != null
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.user_attributes : v.default_values == null || v.multiple_values
+    ])
+    error_message = format(
+      "These attributes give several defaults without multiple_values: %s. Only a multi-valued attribute holds more than one default; set multiple_values = true, or use default_value.",
+      join("; ", [
+        for k, v in var.user_attributes : "attribute \"${k}\""
+        if v.default_values != null && !v.multiple_values
+      ])
+    )
+  }
+}
+
+variable "attribute_selectable_values" {
+  description = <<-DESC
+    Values a user or group may switch an attribute to, keyed by a local name.
+
+    This is not an assigned value. It is the set the subject can switch between
+    from the File menu of a dashboard, workbook or model, and their actual value
+    still comes from an assignment or the definition's default.
+
+    It grants data access. Access filters and shared extensions commonly route
+    on the same attribute, so letting someone switch to another tenant's value
+    usually lets them read that tenant's rows. List only what the subject should
+    see, and treat allow_any_value as the wide grant it is.
+
+    attribute is a key from var.user_attributes. Exactly one subject:
+
+      group_uuid  a group's UUID. Not a key from var.groups, and not
+                  omni_user_group.id - see the note below.
+      user        an email from var.users.
+
+    group_uuid is a literal because this endpoint is the only one in the API
+    that identifies a group by its UUID primary key. Every other one - model
+    roles, connection roles, folder and document permissions, SCIM - uses the
+    eight-character mini_uuid that omni_user_group.id holds, and no endpoint
+    converts between them. Finding 43.
+
+    Getting a UUID, in order of preference: query the database
+    (select id, mini_uuid, name from user_groups), or open the group in Omni at
+    /groups/<mini>/<name>/members and take the UUID that appears on that page
+    and no other. Confirm it before using it, because the endpoint answers 200
+    for any group in the organization and provisioning the wrong one grants the
+    wrong people data access:
+
+      curl -s -o /dev/null -w '%%{http_code}\n' \
+        -H "Authorization: Bearer $OMNI_API_TOKEN" \
+        "$OMNI_BASE_URL/api/v1/user-attributes/<attribute id>/selectable-values?groupId=<uuid>"
+
+    A UUID belongs to the group row, so replacing a group makes it stale. That
+    fails the apply with a 404 rather than provisioning quietly, which is the
+    one good thing about this arrangement.
+  DESC
+
+  type = map(object({
+    attribute  = string
+    group_uuid = optional(string)
+    user       = optional(string)
+    values     = optional(list(string))
+
+    # Whether the subject may switch to a value that is not listed.
+    allow_any_value = optional(bool, false)
+  }))
+
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attribute_selectable_values :
+      (v.group_uuid == null) != (v.user == null)
+    ])
+    error_message = format(
+      "These entries do not name exactly one subject: %s. Set group_uuid or user, not both and not neither.",
+      join("; ", [
+        for k, v in var.attribute_selectable_values : "entry \"${k}\""
+        if(v.group_uuid == null) == (v.user == null)
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attribute_selectable_values :
+      contains(keys(var.user_attributes), v.attribute)
+    ])
+    error_message = format(
+      "These entries name an attribute that is not in var.user_attributes: %s.",
+      join("; ", [
+        for k, v in var.attribute_selectable_values : "entry \"${k}\" names \"${v.attribute}\""
+        if !contains(keys(var.user_attributes), v.attribute)
+      ])
+    )
+  }
+
+  # A mini_uuid is eight characters and a UUID is thirty-six, so the common
+  # mistake - passing omni_user_group.id, or a key from var.groups - is caught
+  # here with an explanation rather than by the API with "Invalid UUID".
+  validation {
+    condition = alltrue([
+      for k, v in var.attribute_selectable_values :
+      v.group_uuid == null || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", lower(coalesce(v.group_uuid, "__unset__"))))
+    ])
+    error_message = format(
+      "These entries do not give a UUID for group_uuid: %s. This endpoint wants the group's UUID primary key, not the eight-character id that omni_user_group.id holds and that the rest of this configuration uses. See the variable description for how to find it.",
+      join("; ", [
+        for k, v in var.attribute_selectable_values : "entry \"${k}\" gives \"${v.group_uuid}\""
+        if v.group_uuid != null && !can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", lower(coalesce(v.group_uuid, "__unset__"))))
+      ])
+    )
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.attribute_selectable_values :
+      v.user == null || contains(keys(var.users), coalesce(v.user, "__unset__"))
+    ])
+    error_message = format(
+      "These entries name a user that is not in var.users: %s. Terraform can only provision for a user it manages.",
+      join("; ", [
+        for k, v in var.attribute_selectable_values : "entry \"${k}\" names user \"${v.user}\""
+        if v.user != null && !contains(keys(var.users), coalesce(v.user, "__unset__"))
+      ])
+    )
+  }
 }
 
 variable "user_attribute_values" {
@@ -266,8 +461,8 @@ variable "tenant_attribute_id" {
     configuration. On an attribute driving an access filter that is row-level
     security quietly ceasing to apply, with nothing failing to say so.
 
-    Read it from GET /v1/user-attributes. Definitions are made in the UI; the
-    API has no create endpoint. Set this and tenant_attribute is ignored.
+    Read it from GET /v1/user-attributes, or from var.user_attributes if
+    Terraform created it. Set this and tenant_attribute is ignored.
   DESC
 
   type    = string

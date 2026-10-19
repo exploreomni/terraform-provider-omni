@@ -115,16 +115,24 @@ which is the entire value proposition for embed infrastructure as code.
 
 ### Gap 2: user attribute definitions are read-only
 
-`GET /api/v1/user-attributes` is the only method. The response is complete and
-useful, listing id, name, label, type, default value, whether multiple values
-are allowed, and whether the attribute is system defined.
+Closed. `POST`, `PUT` and `DELETE` landed on 2026-09-21, and
+`PUT /api/v1/user-attributes/{id}/selectable-values` on 2026-09-30.
 
-Attribute definitions are what row-level security keys off, and what every
-signed embed URL passes values for. Because they can only be made in the UI, the
-security-critical half of an embed deployment cannot be versioned, reviewed in a
-pull request, or replicated to a new instance. Promoting a configuration between
-environments silently produces an instance where scoping does nothing, because
-the attribute the config references does not exist.
+`GET` lists id, name, label, type, default value, whether multiple values are
+allowed, and whether the attribute is system defined.
+
+This was the most valuable gap on the list. Attribute definitions are what
+row-level security keys off and what every signed embed URL passes values for,
+so while they could only be made in the UI, the security-critical half of an
+embed deployment could not be versioned, reviewed in a pull request, or
+replicated to a new instance: promoting a configuration silently produced an
+instance where scoping did nothing.
+
+Two things the endpoints still do not do. `type` is immutable, so changing it
+is a replacement and a replacement drops every value users hold. And
+selectable-values takes a *membership* ID for a user subject without saying so
+or rejecting a user ID, which means a wrong ID provisions nothing and returns
+success.
 
 The provider mitigates this with a data source that fails at plan time when an
 expected attribute is absent. That converts a silent failure into a loud one,
@@ -199,6 +207,35 @@ role. In other words, **destroying a role assignment does not reliably revoke
 access**. It only works if the connection's base role is already `NO_ACCESS`.
 
 **Needed:** `DELETE` on both model-roles endpoints.
+
+### Gap 6b: a group cannot be a selectable-values subject
+
+`PUT /api/v1/user-attributes/{id}/selectable-values` takes `group_id` as the
+group's UUID primary key. Every other group-scoped endpoint - model roles,
+connection roles, folder and document permissions, SCIM - uses the group's
+eight-character `mini_uuid`, a separately generated column rather than an
+encoding of the UUID.
+
+No endpoint returns the UUID. `GET /api/v1/user-groups` does not exist, SCIM
+reports the `mini_uuid` as the group's `id`, and
+`GET /api/v1/user-groups/{id}/model-roles` echoes the `mini_uuid` back in its
+own `userGroupId` field. A group subject therefore cannot be addressed from
+the API at all, by any client.
+
+Both documents are internally consistent and disagree with each other: this
+endpoint's README calls the field "User group id" and uses a UUID in every
+example, while SCIM calls the mini "id".
+
+The UUID is findable, which makes this survivable rather than fatal: it
+appears in the group's own settings pages and nowhere else in the instance, so
+comparing two group pages identifies it, and a `GET` of this endpoint with it
+answers 200 for a real group. That is a one-off manual step per group, it goes
+stale if the group is recreated, and it is not something a customer should be
+asked to do.
+
+**Needed:** one of - `selectable-values` accepts the `mini_uuid` like its
+neighbours, SCIM returns the UUID alongside it, or `GET /api/v1/user-groups`
+exists and returns both.
 
 ### Gap 7: custom roles have no API
 

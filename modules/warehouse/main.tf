@@ -20,7 +20,12 @@ resource "omni_connection" "this" {
   port     = each.value.port
   database = each.value.database
   username = each.value.username
-  password = var.passwords[each.key]
+  # try, like private_key and oauth_client_secret below. A bare index here
+  # failed the whole plan with "Invalid index" and no mention of which
+  # connection, on any deployment whose password secret was unset - which is
+  # every key-pair, OAuth and machine-auth connection. A connection that does
+  # need a password now fails at apply, with the API saying so.
+  password = try(var.passwords[each.key], null)
 
   warehouse      = each.value.warehouse
   region         = each.value.region

@@ -21,6 +21,18 @@ type Folder struct {
 	URL            string       `json:"url,omitempty"`
 }
 
+// ownerIdentifier is the owner's id from whichever shape the response used:
+// ownerId on a create or by-id read, a nested owner object on a list.
+func (f *Folder) ownerIdentifier() string {
+	if f.OwnerID != "" {
+		return f.OwnerID
+	}
+	if f.Owner != nil {
+		return f.Owner.ID
+	}
+	return ""
+}
+
 // FolderOwner is the owner block returned by the list endpoint.
 type FolderOwner struct {
 	ID   string `json:"id"`
@@ -117,14 +129,80 @@ func (c *Client) ListFolders(ctx context.Context, scope, ownerID string) ([]Fold
 	}
 }
 
-// GetFolder finds a folder by ID. The API has no get-by-id route for folders, so
-// this pages the list endpoint and matches on ID.
+// GetFolder reads a folder by ID.
+//
+// GET /v1/folders/{id} shipped in October 2026. Before it, the only way to see
+// one folder was to page the whole list and scan, which is what
+// findFolderInList below still does - and it stays, as a fallback, for two
+// reasons.
+//
+// An instance that does not have the route answers 404, which is exactly what
+// it answers for a folder that does not exist. Taking that at face value would
+// have Read remove the folder from state, and the next apply would create a
+// second one beside the first. A fallback costs one wasted call on such an
+// instance and nothing at all on a current one.
+//
+// And if the response ever arrives wrapped in an envelope this does not know
+// about, the decode succeeds into an empty struct rather than failing. An
+// empty ID is the tell, and it falls back rather than handing back a folder
+// with no identity.
+//
+// The by-id response carries no scope or ownerId: those live on the
+// permissions endpoint. Both are RequiresReplace on the resource, so letting
+// them come back empty would plan a replacement of a folder that never
+// changed. The values the caller already knew are carried through instead.
+func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
+	var out Folder
+	err := c.Get(ctx, "/v1/folders/"+url.PathEscape(id), nil, &out)
+	switch {
+	case err == nil && out.ID != "":
+		if out.Scope == "" {
+			out.Scope = scope
+		}
+		if out.OwnerID == "" {
+			out.OwnerID = ownerID
+		}
+
+		// An import has no prior state, so there is nothing to carry through
+		// and ownerId is left empty - which on a RequiresReplace attribute
+		// reads as a change. The list endpoint does return it, so recover it
+		// from there rather than letting import produce a plan that replaces
+		// the folder it has just adopted.
+		//
+		// Only when both are empty, which outside import means a folder that
+		// genuinely has no owner. That costs a list scan per read, and the
+		// alternative is a resource whose import is quietly wrong.
+		if out.OwnerID == "" {
+			if full, scanErr := c.findFolderInList(ctx, id, out.Scope, ""); scanErr == nil {
+				// The list reports the owner as a nested object and the create
+				// response reports it as ownerId. Take whichever arrived: the
+				// first version of this copied only OwnerID, which is always
+				// empty in a list response, so it fetched the right folder and
+				// dropped the one field it came for.
+				out.Owner = full.Owner
+				out.OwnerID = full.ownerIdentifier()
+				if out.Scope == "" {
+					out.Scope = full.Scope
+				}
+			}
+		}
+		return &out, nil
+	case err != nil && !IsNotFound(err):
+		// A real failure: permissions, a timeout, a 5xx. Scanning the list
+		// would almost certainly fail the same way and would bury the reason.
+		return nil, err
+	}
+
+	return c.findFolderInList(ctx, id, scope, ownerID)
+}
+
+// findFolderInList pages /v1/folders and matches on ID.
 //
 // ownerID is only sent for restricted scope, where an organization API key is
 // required to supply it. For organization scope an organization key returns
 // every folder when ownerID is omitted, but filters to a single user's folders
 // when it is present, which would hide the folder we are looking for.
-func (c *Client) GetFolder(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
+func (c *Client) findFolderInList(ctx context.Context, id, scope, ownerID string) (*Folder, error) {
 	if scope != "restricted" {
 		ownerID = ""
 	}
@@ -173,9 +251,12 @@ type ModelInput struct {
 
 // UserAttribute is a user attribute definition.
 //
-// The API exposes these read-only. Definitions are created in the UI under
-// Settings > User attributes, which means the schema that row-level security
-// keys off cannot be managed as code.
+// Creatable since 2026-09-21. Before that the API exposed these read-only and
+// the schema row-level security keys off could not be managed as code.
+//
+// Reference by ID rather than by name wherever something already depends on
+// the definition: a rename in the UI is invisible to an ID and silently
+// stops a name from matching.
 type UserAttribute struct {
 	ID             string           `json:"id"`
 	Name           string           `json:"name"`
@@ -222,7 +303,7 @@ func (c *Client) FindUserAttributeByID(ctx context.Context, id string) (*UserAtt
 		StatusCode: http.StatusNotFound,
 		Method:     http.MethodGet,
 		Path:       "/v1/user-attributes",
-		Message:    fmt.Sprintf("no user attribute with ID %q. Definitions are created in the UI under Settings > User attributes; the API has no create endpoint", id),
+		Message:    fmt.Sprintf("no user attribute with ID %q. Check Settings > User attributes, or create it with omni_user_attribute rather than referencing it", id),
 	}
 }
 
@@ -240,7 +321,7 @@ func (c *Client) FindUserAttribute(ctx context.Context, name string) (*UserAttri
 		StatusCode: http.StatusNotFound,
 		Method:     http.MethodGet,
 		Path:       "/v1/user-attributes",
-		Message:    fmt.Sprintf("no user attribute named %q. Definitions are created in the UI under Settings > User attributes; the API has no create endpoint", name),
+		Message:    fmt.Sprintf("no user attribute named %q. Check Settings > User attributes, or create it with omni_user_attribute rather than referencing it", name),
 	}
 }
 

@@ -1,6 +1,6 @@
 default: build
 
-.PHONY: build install test fmt lint docs
+.PHONY: build install test testacc sweep fmt lint docs
 
 build:
 	go build -v ./...
@@ -11,15 +11,24 @@ install:
 test:
 	go test -v -cover ./internal/...
 
+# Acceptance tests. These create, update and destroy real objects, so point
+# OMNI_BASE_URL at a throwaway instance. -parallel 1 because they share one
+# instance and the API allows 60 requests a minute.
 testacc:
-	TF_ACC=1 go test -v -timeout 120m ./internal/...
+	TF_ACC=1 go test -v -parallel 1 -timeout 120m ./internal/provider/
+
+# Delete objects left behind by a failed acceptance run. Only ones named
+# tfacc-*, so this is safe to run against an instance that has other things on
+# it - though it should still only ever be the test instance.
+sweep:
+	go test -v -sweep=all -timeout 20m ./internal/provider/
 
 fmt:
 	gofmt -w .
 	terraform fmt -recursive ./examples/
 
 docs:
-	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs generate
+	go tool tfplugindocs generate
 
 # Point the module path at your own GitHub org before publishing, e.g.
 #   make rename OWNER=my-org
