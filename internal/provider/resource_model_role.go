@@ -88,6 +88,25 @@ func modelRoleAttributes(subjectAttr, subjectDescription string) map[string]sche
 	}
 }
 
+// keepConfiguredConnection leaves connection_id as the configuration left it.
+//
+// A role scoped to a model has no configured connection, and the endpoints
+// report the model's connection regardless. Writing that into state returns a
+// value for an Optional attribute the configuration left null, and the
+// framework rejects that outright:
+//
+//	Provider produced inconsistent result after apply
+//	.connection_id: was null, but now cty.StringVal("02f264a8-...")
+//
+// A connection-scoped role does configure one, and then the reported value is
+// taken - which is where a normalised form from the API gets picked up.
+func keepConfiguredConnection(current types.String, reported string) types.String {
+	if current.IsNull() || current.IsUnknown() || reported == "" {
+		return current
+	}
+	return types.StringValue(reported)
+}
+
 func modelRoleID(subjectID, modelID, connectionID string) string {
 	target := modelID
 	if target == "" {
@@ -217,9 +236,7 @@ func (r *userModelRoleResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	state := plan
-	if assigned.ConnectionID != "" {
-		state.ConnectionID = types.StringValue(assigned.ConnectionID)
-	}
+	state.ConnectionID = keepConfiguredConnection(state.ConnectionID, assigned.ConnectionID)
 	state.ID = types.StringValue(modelRoleID(
 		plan.SubjectID.ValueString(),
 		plan.ModelID.ValueString(),
@@ -252,9 +269,7 @@ func (r *userModelRoleResource) Read(ctx context.Context, req resource.ReadReque
 	}
 
 	state.RoleName = types.StringValue(match.RoleName)
-	if match.ConnectionID != "" {
-		state.ConnectionID = types.StringValue(match.ConnectionID)
-	}
+	state.ConnectionID = keepConfiguredConnection(state.ConnectionID, match.ConnectionID)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -367,9 +382,7 @@ func (r *userGroupModelRoleResource) Create(ctx context.Context, req resource.Cr
 	}
 
 	state := plan
-	if assigned.ConnectionID != "" {
-		state.ConnectionID = types.StringValue(assigned.ConnectionID)
-	}
+	state.ConnectionID = keepConfiguredConnection(state.ConnectionID, assigned.ConnectionID)
 	state.ID = types.StringValue(modelRoleID(
 		plan.SubjectID.ValueString(),
 		plan.ModelID.ValueString(),
@@ -402,9 +415,7 @@ func (r *userGroupModelRoleResource) Read(ctx context.Context, req resource.Read
 	}
 
 	state.RoleName = types.StringValue(match.RoleName)
-	if match.ConnectionID != "" {
-		state.ConnectionID = types.StringValue(match.ConnectionID)
-	}
+	state.ConnectionID = keepConfiguredConnection(state.ConnectionID, match.ConnectionID)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
