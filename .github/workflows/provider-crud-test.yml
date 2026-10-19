@@ -100,7 +100,7 @@ jobs:
           # thing being tested.
           VERSION=0.1.0
           for HOST in registry.terraform.io registry.opentofu.org; do
-            MIRROR="${RUNNER_TEMP}/plugins/${HOST}/ashima-omni/omni/${VERSION}/linux_amd64"
+            MIRROR="${RUNNER_TEMP}/plugins/${HOST}/$(OWNER)/omni/${VERSION}/linux_amd64"
             mkdir -p "$MIRROR"
             go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
           done
@@ -111,14 +111,14 @@ jobs:
             filesystem_mirror {
               path = "${RUNNER_TEMP}/plugins"
               include = [
-                "registry.terraform.io/ashima-omni/omni",
-                "registry.opentofu.org/ashima-omni/omni",
+                "registry.terraform.io/$(OWNER)/omni",
+                "registry.opentofu.org/$(OWNER)/omni",
               ]
             }
             direct {
               exclude = [
-                "registry.terraform.io/ashima-omni/omni",
-                "registry.opentofu.org/ashima-omni/omni",
+                "registry.terraform.io/$(OWNER)/omni",
+                "registry.opentofu.org/$(OWNER)/omni",
               ]
             }
           }

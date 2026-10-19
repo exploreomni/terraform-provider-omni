@@ -54,7 +54,7 @@ jobs:
           # ~/.terraformrc for the HCP credentials, so we append to it rather
           # than being overwritten by it.
           VERSION=0.1.0
-          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/ashima-omni/omni/${VERSION}/linux_amd64"
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/$(OWNER)/omni/${VERSION}/linux_amd64"
           mkdir -p "$MIRROR"
           go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
           cat >> ~/.terraformrc <<TFRC
@@ -62,10 +62,10 @@ jobs:
           provider_installation {
             filesystem_mirror {
               path    = "${RUNNER_TEMP}/plugins"
-              include = ["registry.terraform.io/ashima-omni/omni"]
+              include = ["registry.terraform.io/$(OWNER)/omni"]
             }
             direct {
-              exclude = ["registry.terraform.io/ashima-omni/omni"]
+              exclude = ["registry.terraform.io/$(OWNER)/omni"]
             }
           }
           TFRC

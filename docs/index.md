@@ -19,7 +19,7 @@ folders, and the users, groups, and role assignments that decide who can see wha
 terraform {
   required_providers {
     omni = {
-      source  = "ashima-omni/omni"
+      source  = "$(OWNER)/omni"
       version = "~> 0.1"
     }
   }

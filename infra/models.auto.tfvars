@@ -23,7 +23,7 @@ models = {
 #     connection = "embed-base"
 #
 #     git = {
-#       clone_url = "git@github.com:ashima-omni/omni-model-playground.git"
+#       clone_url = "git@github.com:$(OWNER)/omni-model-playground.git"
 #
 #       # ssh with a deploy key, or https_token with a deploy token.
 #       auth_method = "ssh"

@@ -3,7 +3,7 @@ terraform {
 
   required_providers {
     omni = {
-      source = "ashima-omni/omni"
+      source = "$(OWNER)/omni"
     }
   }
 

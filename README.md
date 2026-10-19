@@ -49,7 +49,7 @@ for an attribute someone made in the UI, and the resource of the same name for o
 terraform {
   required_providers {
     omni = {
-      source  = "ashima-omni/omni"
+      source  = "$(OWNER)/omni"
       version = "~> 0.1"
     }
   }
@@ -373,7 +373,7 @@ To try the provider against a real instance before it is published, add a dev ov
 ```hcl
 provider_installation {
   dev_overrides {
-    "ashima-omni/omni" = "/path/to/your/gopath/bin"
+    "$(OWNER)/omni" = "/path/to/your/gopath/bin"
   }
   direct {}
 }
