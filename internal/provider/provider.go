@@ -153,6 +153,8 @@ func (p *omniProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewLabelResource,
 		NewColorPaletteResource,
 		NewModelGitResource,
+		NewDbtConfigurationResource,
+		NewDbtEnvironmentResource,
 	}
 }
 

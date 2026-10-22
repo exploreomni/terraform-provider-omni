@@ -24,6 +24,8 @@ that layer in the same review process as the rest of your infrastructure.
 | `omni_connection_schedule`   | `/v1/connections/{id}/schedules`          | Schema refresh. Fails until the connection has a schema model                 |
 | `omni_model`                 | `/v1/models`                              | `SCHEMA`, `SHARED`, `SHARED_EXTENSION`. See the schema model note below       |
 | `omni_model_git`             | `/v1/models/{id}/git`                     | Model version control                                                         |
+| `omni_dbt_configuration`     | `/v1/connections/{id}/dbt`                | One per connection. A `PUT` with no create, so apply replaces any existing one |
+| `omni_dbt_environment`       | `/v1/connections/{id}/dbt/environments`   | Needs `enable_virtual_schemas`. Secret variable values are not read back      |
 | `omni_folder`                | `/v1/folders`                             | Nesting up to seven levels                                                    |
 | `omni_folder_permission`     | `/v1/folders/{id}/permissions`            | Destroy downgrades rather than revokes                                        |
 | `omni_document_permission`   | `/v1/documents/{id}/permissions`          | Same. `document_id` is a literal ID, since documents are made in the UI       |
