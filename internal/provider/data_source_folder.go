@@ -98,7 +98,10 @@ func (d *folderDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
-	// Folders have no get-by-id route, so both lookups page the list.
+	// Lookup by path needs the list, and the list is also the only response
+	// that carries scope and ownerId, which GET /v1/folders/{id} omits. Both
+	// lookups page it rather than taking the by-id route for one and not the
+	// other.
 	folders, err := d.client.ListFolders(ctx, "", "")
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to list Omni folders", err.Error())

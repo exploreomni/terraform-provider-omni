@@ -247,10 +247,14 @@ shared folder named after the entity. Creating one by name over SCIM produces a 
 that merely shares the name. What this provider creates is the non-entity groups that a signed
 URL's `groups` claim resolves to.
 
-**Connection environments cannot be driven from Terraform alone.** `omni_connection_environment`
-routes queries on values of the base connection's environment user attribute, and `omni_connection`
-does not expose that field, so it has to be set in the UI. The API also has no read endpoint for
-connection environments, so drift on them is undetectable.
+**Connection environment drift is undetectable.** `omni_connection_environment` routes queries on
+values of the base connection's environment user attribute. `PATCH /v1/connections/{id}` does set
+that attribute and `GET /v1/connections/{id}` reads it back, so it is not a UI-only field, but
+`omni_connection` does not expose it yet. There is no read endpoint on `/v1/connection-environments`,
+so the mapping of an environment connection to its attribute values cannot be read back at all.
+
+**System user attributes have no ID.** `GET /v1/user-attributes` returns `"id": ""` for the
+`system: true` attributes, so those can only be referenced by name.
 
 **Custom roles are referenced by name only.** No role catalogue endpoint was found, so a custom
 role renamed in the UI breaks a grant naming it, and nothing detects that.
@@ -262,7 +266,10 @@ already exists has to be imported first.
 not detected. Terraform keeps what you configured. `default_schema` on Snowflake is accepted and
 stored as null, so it is deliberately not set.
 
-**The folders API has no get-by-id route,** so reads page the list endpoint and match on ID.
+**Folder reads use `GET /v1/folders/{id}`.** That response omits `scope` and `ownerId`, which live
+on the permissions endpoint and are both `RequiresReplace`, so they are carried through from prior
+state rather than being allowed to read as a change. Import has no prior state, so it pages the
+list endpoint once to recover `ownerId`.
 
 **`omni_user` tracks only the attribute keys declared in the config;** attributes set elsewhere are
 left alone.
