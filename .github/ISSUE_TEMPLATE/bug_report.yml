@@ -1,0 +1,84 @@
+name: Bug report
+description: Something the provider does that it should not, or will not do that it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything security related, do not open an issue. Follow
+        [SECURITY.md](https://github.com/exploreomni/terraform-provider-omni/blob/main/SECURITY.md)
+        instead.
+
+  - type: input
+    id: provider-version
+    attributes:
+      label: Provider version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: terraform-version
+    attributes:
+      label: Terraform or OpenTofu version
+      description: Output of `terraform version`
+      placeholder: "Terraform v1.9.8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Include the error exactly as Terraform printed it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: >
+        The smallest configuration that reproduces it. Remove credentials,
+        instance URLs and anything else you would not publish.
+      render: hcl
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. terraform apply
+        2. Change the label colour in the Omni UI
+        3. terraform plan
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug output
+      description: >
+        Run with `TF_LOG=DEBUG` and attach the relevant part, or link a gist.
+        Check it for API tokens before posting - debug output contains request
+        headers.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have checked the known limitations in CHANGELOG.md
+          required: true
+        - label: I have removed credentials from everything pasted above
+          required: true
