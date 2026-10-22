@@ -1,0 +1,15 @@
+# Review is required from a code owner on every pull request.
+#
+# Replace this with a team once one exists, so review does not depend on one
+# person being available:
+#   * @exploreomni/terraform-provider
+
+* @ashima-omni
+
+# Generated. Regenerate with `make docs` rather than editing.
+/docs/ @ashima-omni
+
+# Release and test automation. A change here affects what gets published.
+/.github/workflows/ @ashima-omni
+/.goreleaser.yml @ashima-omni
+/terraform-registry-manifest.json @ashima-omni
