@@ -8,7 +8,7 @@ terraform {
   }
 
   cloud {
-    organization = "ashima-poc"
+    organization = "omnianalytics"
 
     workspaces {
       name = "omni-terraform"
