@@ -43,29 +43,89 @@ that layer in the same review process as the rest of your infrastructure.
 `omni_user_attribute`, which takes exactly one of the two and prefers the ID. Use the data source
 for an attribute someone made in the UI, and the resource of the same name for one Terraform owns.
 
-## Quick start
+## Installation
+
+The provider is published to the Terraform Registry, so there is nothing to
+download by hand. Declare it and run `terraform init`:
 
 ```hcl
 terraform {
   required_providers {
     omni = {
-      source  = "$(OWNER)/omni"
+      source  = "exploreomni/omni"
       version = "~> 0.1"
     }
   }
 }
+```
 
+Terraform fetches the signed release and verifies it against the GPG key
+registered on the `exploreomni` namespace. Works with Terraform 1.0 and later.
+
+OpenTofu resolves against its own registry by default, so name this one:
+
+```hcl
+source = "registry.terraform.io/exploreomni/omni"
+```
+
+## Configuring the provider
+
+```hcl
 provider "omni" {
-  base_url  = "https://blobsrus.omniapp.co" # or OMNI_BASE_URL
-  api_token = var.omni_api_token            # or OMNI_API_TOKEN
+  base_url  = "https://yourinstance.omniapp.co"
+  api_token = var.omni_api_token
 }
+```
 
+Both arguments fall back to `OMNI_BASE_URL` and `OMNI_API_TOKEN`. Prefer the
+environment in CI, so the token never reaches a `.tf` file:
+
+```bash
+export OMNI_BASE_URL=https://yourinstance.omniapp.co
+export OMNI_API_TOKEN=...
+terraform plan
+```
+
+## Your first configuration
+
+```hcl
 resource "omni_folder" "finance" {
   name  = "Finance"
   path  = "finance"
   scope = "organization"
 }
+
+resource "omni_user_group" "analysts" {
+  display_name = "Analysts"
+}
+
+resource "omni_folder_permission" "analysts_finance" {
+  folder_id      = omni_folder.finance.id
+  role           = "VIEWER"
+  user_group_ids = [omni_user_group.analysts.id]
+}
 ```
+
+A folder, a group, and the grant that connects them. Most Omni configuration
+is that shape repeated.
+
+## What people use this for
+
+**Keeping instances identical.** One configuration and a tfvars file per
+instance. The same folder tree, groups and model roles apply to dev, stage and
+production, so the three stop drifting apart.
+
+**Reviewing access as code.** A role grant becomes a diff. `terraform plan` in
+a pull request shows who gains access to what, and merging is the approval.
+
+**Rebuilding an instance from nothing.** Connections, models, folders, groups
+and permissions all come from configuration, so standing up a new instance is
+an apply rather than an afternoon of clicking.
+
+**Running alongside an identity provider.** If Okta or Entra provisions users
+over SCIM, let it own identity and let Terraform own authorization. See
+[docs/SCIM-COEXISTENCE.md](./docs/SCIM-COEXISTENCE.md), which is the first
+thing to read on any instance with more than a handful of people.
 
 More in [`examples/`](./examples), including an end-to-end setup in
 [`examples/complete`](./examples/complete).
