@@ -106,6 +106,36 @@ Commit the regenerated files with your change.
 - `make fmt`, `make test` and `make docs` should all be clean before you open
   it.
 
+## Releasing
+
+Releases are cut from a tag. The registry namespace publishes new versions
+automatically, so pushing a tag is publishing. There is no separate publish
+step, and no way to withdraw a version once it is out.
+
+1. Update `CHANGELOG.md`: move everything under Unreleased into a new version
+   heading with today's date.
+2. Tag and push:
+
+```bash
+git tag -a v0.1.1 -m "v0.1.1"
+git push origin v0.1.1
+```
+
+3. The release workflow imports the signing key, runs GoReleaser across every
+   supported platform, and publishes 16 assets: 13 platform archives,
+   `SHA256SUMS`, its detached signature, and the registry manifest.
+4. Confirm the manifest is there. Without it the registry records the provider
+   as protocol v5 only, and `terraform init` then fails for everyone.
+
+```bash
+gh release view v0.1.1 --json assets --jq '.assets[].name'
+```
+
+The signing key lives on the `exploreomni` namespace in HCP Terraform, and
+`GPG_PRIVATE_KEY` and `PASSPHRASE` are repository secrets. A version number is
+the one thing here that cannot be reused, so check the tag points where you
+expect before pushing it.
+
 ## Reporting a problem
 
 Open an issue using one of the templates. For anything security related, follow
