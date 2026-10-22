@@ -410,17 +410,6 @@ survives the rewrite.
 What it cannot tell you is anything the API decides. A plan here will happily
 create something that already exists; only an apply knows.
 
-## Publishing to the Terraform Registry
-
-1. Point the module path at the GitHub org that will own the repo: `make rename OWNER=your-org`.
-   The repo itself must be named `terraform-provider-omni` and be public.
-2. Create a GPG key, add `GPG_PRIVATE_KEY` and `PASSPHRASE` to the repo's Actions secrets, and
-   upload the public key to your Terraform Registry account.
-3. Tag a release: `git tag v0.1.0 && git push origin v0.1.0`. The release workflow builds every
-   platform with GoReleaser and signs the checksums.
-4. Sign in at [registry.terraform.io](https://registry.terraform.io) with GitHub and publish the
-   repo.
-
 ## Known limitations
 
 These are properties of the Omni API, not things left undone. Each one is recorded with its
