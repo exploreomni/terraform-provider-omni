@@ -1,0 +1,44 @@
+name: Feature request
+description: A resource, data source or attribute the provider should support
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some gaps are in Omni's REST API rather than in the provider, and cannot
+        be closed here. The known ones are listed in
+        [CHANGELOG.md](https://github.com/exploreomni/terraform-provider-omni/blob/main/CHANGELOG.md)
+        and the full analysis is in
+        [docs/API-COVERAGE.md](https://github.com/exploreomni/terraform-provider-omni/blob/main/docs/API-COVERAGE.md).
+        Worth a look before filing.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: >
+        Describe the outcome, not just the resource. Knowing what you are
+        configuring often changes what the right shape is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like the provider to support
+      description: Sketch the configuration you would want to write, if you can.
+      render: hcl
+    validations:
+      required: true
+
+  - type: input
+    id: endpoint
+    attributes:
+      label: The API endpoint, if you know it
+      placeholder: "POST /api/v1/..."
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How you are handling it today
+      description: Manual steps, a null_resource, a script, or nothing yet.

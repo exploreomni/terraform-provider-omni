@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/exploreomni/terraform-provider-omni/security/advisories/new
+    about: Report privately through a security advisory, never as a public issue.
+  - name: Provider documentation
+    url: https://registry.terraform.io/providers/exploreomni/omni/latest/docs
+    about: Reference for every resource and data source.
+  - name: Running alongside an identity provider
+    url: https://github.com/exploreomni/terraform-provider-omni/blob/main/docs/SCIM-COEXISTENCE.md
+    about: Start here if users and groups come from Okta, Entra or Google.
+  - name: Omni platform support
+    url: https://docs.omni.co
+    about: For questions about Omni itself rather than the provider.
