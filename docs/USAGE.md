@@ -18,7 +18,7 @@ Go toolchain, no local configuration.
 terraform {
   required_providers {
     omni = {
-      source  = "$(OWNER)/omni"
+      source  = "exploreomni/omni"
       version = "~> 0.1"
     }
   }
@@ -75,7 +75,7 @@ In `~/.terraformrc`:
 ```hcl
 provider_installation {
   dev_overrides {
-    "$(OWNER)/omni" = "/Users/you/go/bin"
+    "exploreomni/omni" = "/Users/you/go/bin"
   }
   direct {}
 }
@@ -89,7 +89,7 @@ Then run Terraform as usual, with two differences:
   That is expected.
 
 This file is global. While it exists, every Terraform project on the machine
-resolves `$(OWNER)/omni` to your local build. Delete it when you are done.
+resolves `exploreomni/omni` to your local build. Delete it when you are done.
 
 **A dev override cannot be used with a remote backend**, because a remote
 backend requires `terraform init` and `init` will try to reach the registry.
@@ -104,7 +104,7 @@ Build the binary into the directory layout Terraform expects:
 
 ```bash
 VERSION=0.1.0
-MIRROR="$HOME/.terraform.d/plugins/registry.terraform.io/$(OWNER)/omni/${VERSION}/linux_amd64"
+MIRROR="$HOME/.terraform.d/plugins/registry.terraform.io/exploreomni/omni/${VERSION}/linux_amd64"
 mkdir -p "$MIRROR"
 go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
 ```
@@ -118,10 +118,10 @@ In `~/.terraformrc`:
 provider_installation {
   filesystem_mirror {
     path    = "/home/you/.terraform.d/plugins"
-    include = ["registry.terraform.io/$(OWNER)/omni"]
+    include = ["registry.terraform.io/exploreomni/omni"]
   }
   direct {
-    exclude = ["registry.terraform.io/$(OWNER)/omni"]
+    exclude = ["registry.terraform.io/exploreomni/omni"]
   }
 }
 ```
@@ -153,7 +153,7 @@ published to both, either qualify the source:
 terraform {
   required_providers {
     omni = {
-      source = "registry.terraform.io/$(OWNER)/omni"
+      source = "registry.terraform.io/exploreomni/omni"
     }
   }
 }
@@ -162,7 +162,7 @@ terraform {
 or mirror the binary under the OpenTofu hostname:
 
 ```
-~/.terraform.d/plugins/registry.opentofu.org/$(OWNER)/omni/0.1.0/<platform>/
+~/.terraform.d/plugins/registry.opentofu.org/exploreomni/omni/0.1.0/<platform>/
 ```
 
 OpenTofu reads `~/.tofurc` rather than `~/.terraformrc`, with the same syntax.

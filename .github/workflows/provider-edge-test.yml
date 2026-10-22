@@ -54,7 +54,7 @@ jobs:
       - name: Build provider into a filesystem mirror
         run: |
           VERSION=0.1.0
-          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/$(OWNER)/omni/${VERSION}/linux_amd64"
+          MIRROR="${RUNNER_TEMP}/plugins/registry.terraform.io/exploreomni/omni/${VERSION}/linux_amd64"
           mkdir -p "$MIRROR"
           go build -o "${MIRROR}/terraform-provider-omni_v${VERSION}" .
           cat >> ~/.terraformrc <<TFRC
@@ -62,10 +62,10 @@ jobs:
           provider_installation {
             filesystem_mirror {
               path    = "${RUNNER_TEMP}/plugins"
-              include = ["registry.terraform.io/$(OWNER)/omni"]
+              include = ["registry.terraform.io/exploreomni/omni"]
             }
             direct {
-              exclude = ["registry.terraform.io/$(OWNER)/omni"]
+              exclude = ["registry.terraform.io/exploreomni/omni"]
             }
           }
           TFRC
@@ -79,7 +79,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/tc30" && cd "${RUNNER_TEMP}/tc30"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           resource "omni_user_model_role" "bad" {
@@ -103,7 +103,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/tc31" && cd "${RUNNER_TEMP}/tc31"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           resource "omni_connection" "bad" {
@@ -127,7 +127,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/tc29" && cd "${RUNNER_TEMP}/tc29"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           resource "omni_folder" "f" {
@@ -153,7 +153,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/live" && cd "${RUNNER_TEMP}/live"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
 
@@ -233,7 +233,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/tc22" && cd "${RUNNER_TEMP}/tc22"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "n" { type = string }
@@ -324,7 +324,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/attrs" && cd "${RUNNER_TEMP}/attrs"
           cat > main.tf <<EOF
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "v" { type = string }
@@ -363,7 +363,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/perms" && cd "${RUNNER_TEMP}/perms"
           cat > main.tf <<EOF
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "role" { type = string }
@@ -433,7 +433,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/tc14b" && cd "${RUNNER_TEMP}/tc14b"
           cat > main.tf <<EOF
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "keep_member" { type = bool }
@@ -472,7 +472,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/conn" && cd "${RUNNER_TEMP}/conn"
           cat > main.tf <<EOF
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "base_role" { type = string }
@@ -533,7 +533,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/sched" && cd "${RUNNER_TEMP}/sched"
           cat > main.tf <<EOF
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "cron" { type = string }
@@ -584,7 +584,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/env" && cd "${RUNNER_TEMP}/env"
           cat > main.tf <<EOF
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "tenant" { type = string }
@@ -646,7 +646,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/attrs-ds" && cd "${RUNNER_TEMP}/attrs-ds"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
 
@@ -687,7 +687,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/labels" && cd "${RUNNER_TEMP}/labels"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "label_name" { type = string }
@@ -745,7 +745,7 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/palette" && cd "${RUNNER_TEMP}/palette"
           cat > main.tf <<'EOF'
           terraform {
-            required_providers { omni = { source = "$(OWNER)/omni" } }
+            required_providers { omni = { source = "exploreomni/omni" } }
           }
           provider "omni" {}
           variable "palette_name" { type = string }

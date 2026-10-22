@@ -4,7 +4,7 @@
 terraform {
   required_providers {
     omni = {
-      source  = "$(OWNER)/omni"
+      source  = "exploreomni/omni"
       version = "~> 0.1"
     }
   }
