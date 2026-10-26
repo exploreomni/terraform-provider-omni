@@ -72,8 +72,8 @@ func TestAccDbtConfiguration_basic(t *testing.T) {
 				),
 			},
 			{
-				ResourceName: "omni_dbt_configuration.test",
-				ImportState:  true,
+				ResourceName:  "omni_dbt_configuration.test",
+				ImportState:   true,
 				ImportStateId: connectionID,
 				// token is write-only and never returned, so an imported
 				// configuration cannot carry it. Verifying state would compare
