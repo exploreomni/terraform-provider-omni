@@ -266,10 +266,10 @@ that merely shares the name. What this provider creates is the non-entity groups
 URL's `groups` claim resolves to.
 
 **Connection environment drift is undetectable.** `omni_connection_environment` routes queries on
-values of the base connection's environment user attribute. `PATCH /v1/connections/{id}` does set
-that attribute and `GET /v1/connections/{id}` reads it back, so it is not a UI-only field, but
-`omni_connection` does not expose it yet. There is no read endpoint on `/v1/connection-environments`,
-so the mapping of an environment connection to its attribute values cannot be read back at all.
+values of the base connection's environment user attribute. That attribute is now set through
+`omni_connection`, and it reads back, so drift on the base connection is detected. What is not
+detected is the environment side: there is no read endpoint on `/v1/connection-environments`, so the
+mapping of an environment connection to its attribute values cannot be read back at all.
 
 **System user attributes have no ID.** `GET /v1/user-attributes` returns `"id": ""` for the
 `system: true` attributes, so those can only be referenced by name.

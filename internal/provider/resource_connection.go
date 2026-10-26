@@ -3,7 +3,10 @@ package provider
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -18,9 +21,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &connectionResource{}
-	_ resource.ResourceWithConfigure   = &connectionResource{}
-	_ resource.ResourceWithImportState = &connectionResource{}
+	_ resource.Resource                     = &connectionResource{}
+	_ resource.ResourceWithConfigure        = &connectionResource{}
+	_ resource.ResourceWithImportState      = &connectionResource{}
+	_ resource.ResourceWithConfigValidators = &connectionResource{}
 )
 
 // supportedDialects mirrors the Dialect enum in the Omni OpenAPI spec.
@@ -59,6 +63,9 @@ type connectionResourceModel struct {
 	Database types.String `tfsdk:"database"`
 	Username types.String `tfsdk:"username"`
 	Password types.String `tfsdk:"password"`
+
+	EnvironmentUserAttributeName          types.String `tfsdk:"environment_user_attribute_name"`
+	EnvironmentUserAttributeDefaultValues types.List   `tfsdk:"environment_user_attribute_default_values"`
 
 	BaseRole   types.String `tfsdk:"base_role"`
 	Warehouse  types.String `tfsdk:"warehouse"`
@@ -159,6 +166,19 @@ func (r *connectionResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				MarkdownDescription: "Password to authenticate with, sent as `passwordUnencrypted`. For BigQuery, " +
 					"the full service account JSON. Can be rotated in place. Never returned by the API, so " +
 					"drift on this value is not detected.",
+			},
+			"environment_user_attribute_name": schema.StringAttribute{
+				Optional: true,
+				MarkdownDescription: "Reference name of the user attribute whose value routes a query to a " +
+					"dynamic connection environment. Set this on the base connection, then attach " +
+					"environments with `omni_connection_environment`. Requires " +
+					"`environment_user_attribute_default_values`.",
+			},
+			"environment_user_attribute_default_values": schema.ListAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				MarkdownDescription: "Attribute values that resolve to this base connection rather than to " +
+					"one of its environments. Requires `environment_user_attribute_name`.",
 			},
 			"base_role": schema.StringAttribute{
 				Optional:            true,
@@ -348,6 +368,18 @@ func (r *connectionResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	}
 }
 
+// ConfigValidators keeps the two environment attribute fields together. The API
+// takes them as one nested object with both members required, so setting only
+// one is a request it would reject.
+func (r *connectionResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.RequiredTogether(
+			pathExpr("environment_user_attribute_name"),
+			pathExpr("environment_user_attribute_default_values"),
+		),
+	}
+}
+
 func (r *connectionResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	r.client = clientFromResourceRequest(req, resp)
 }
@@ -370,6 +402,29 @@ func (r *connectionResource) Create(ctx context.Context, req resource.CreateRequ
 			"The API reported success but did not return a connection ID.",
 		)
 		return
+	}
+
+	// POST /v1/connections has no field for the environment user attribute, so
+	// it is applied straight after the create. The connection already exists by
+	// this point: if the PATCH fails, state is written anyway so Terraform
+	// tracks the live connection and marks it tainted, rather than leaving it
+	// orphaned with no state at all.
+	if envAttr, diags := environmentUserAttributeFromPlan(ctx, plan); !diags.HasError() && envAttr != nil {
+		if err := r.client.SetConnectionEnvironmentUserAttribute(ctx, id, envAttr); err != nil {
+			tainted := plan
+			tainted.ID = types.StringValue(id)
+			resp.Diagnostics.Append(resp.State.Set(ctx, &tainted)...)
+			resp.Diagnostics.AddError(
+				"Connection created but its environment user attribute could not be set",
+				"The connection exists and has been recorded in state. "+err.Error(),
+			)
+			return
+		}
+	} else {
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	connection, err := r.client.GetConnection(ctx, id)
@@ -430,6 +485,23 @@ func (r *connectionResource) Update(ctx context.Context, req resource.UpdateRequ
 	if update.PasswordUnencrypted != nil || update.PrivateKey != nil || update.BaseRole != nil {
 		if err := r.client.UpdateConnection(ctx, state.ID.ValueString(), update); err != nil {
 			resp.Diagnostics.AddError("Unable to update Omni connection", err.Error())
+			return
+		}
+	}
+
+	// The environment user attribute goes through its own call, because
+	// removing it means sending an explicit null rather than omitting a field.
+	// A nil result from the helper is the removal.
+	if !plan.EnvironmentUserAttributeName.Equal(state.EnvironmentUserAttributeName) ||
+		!plan.EnvironmentUserAttributeDefaultValues.Equal(state.EnvironmentUserAttributeDefaultValues) {
+		envAttr, diags := environmentUserAttributeFromPlan(ctx, plan)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if err := r.client.SetConnectionEnvironmentUserAttribute(ctx, state.ID.ValueString(), envAttr); err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to update the connection environment user attribute", err.Error())
 			return
 		}
 	}
@@ -534,6 +606,23 @@ func applyConnectionToState(state *connectionResourceModel, connection *client.C
 	// resolve to null only when the plan left it unknown, which it does when the
 	// attribute was not configured at all.
 	state.BaseRole = keepKnown(state.BaseRole, connection.BaseRole)
+
+	// The environment attribute reads back under the flat field names. Same
+	// partial-response discipline as base_role: an absent value must not
+	// overwrite what the configuration set.
+	state.EnvironmentUserAttributeName = keepKnown(
+		state.EnvironmentUserAttributeName,
+		connection.UserAttributeNameForConnectionEnvironments,
+	)
+	if connection.UserAttributeValuesForDefaultEnvironment != nil {
+		elements := make([]attr.Value, 0, len(connection.UserAttributeValuesForDefaultEnvironment))
+		for _, value := range connection.UserAttributeValuesForDefaultEnvironment {
+			elements = append(elements, types.StringValue(value))
+		}
+		state.EnvironmentUserAttributeDefaultValues = types.ListValueMust(types.StringType, elements)
+	} else if state.EnvironmentUserAttributeDefaultValues.IsUnknown() {
+		state.EnvironmentUserAttributeDefaultValues = types.ListNull(types.StringType)
+	}
 	state.DefaultSchema = keepKnown(state.DefaultSchema, connection.DefaultSchema)
 
 	state.CreatedAt = stringOrNull(connection.CreatedAt)
@@ -549,6 +638,29 @@ func applyConnectionToState(state *connectionResourceModel, connection *client.C
 //
 // Returning the current value for the middle case is what stops an absent
 // field from being read as a deliberate clear.
+// environmentUserAttributeFromPlan builds the nested object the PATCH takes, or
+// nil when the configuration no longer sets one, which is how it is cleared.
+func environmentUserAttributeFromPlan(ctx context.Context, plan connectionResourceModel) (*client.EnvironmentUserAttribute, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if plan.EnvironmentUserAttributeName.IsNull() ||
+		plan.EnvironmentUserAttributeName.IsUnknown() ||
+		plan.EnvironmentUserAttributeName.ValueString() == "" {
+		return nil, diags
+	}
+
+	values, d := listToStrings(ctx, plan.EnvironmentUserAttributeDefaultValues)
+	diags.Append(d...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	return &client.EnvironmentUserAttribute{
+		AttributeName: plan.EnvironmentUserAttributeName.ValueString(),
+		DefaultValues: values,
+	}, diags
+}
+
 func keepKnown(current types.String, apiValue string) types.String {
 	if apiValue != "" {
 		return types.StringValue(apiValue)
