@@ -18,7 +18,7 @@ Report it through GitHub's private vulnerability reporting, under the
 of this repository. That opens a private advisory visible only to the
 maintainers.
 
-If you would rather use email, write to <SECURITY-CONTACT@omni.co>.
+If you would rather use email, write to <ps@omni.co>.
 
 Please include:
 
