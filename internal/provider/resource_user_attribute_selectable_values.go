@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -95,8 +96,19 @@ func (r *selectableValuesResource) Schema(_ context.Context, _ resource.SchemaRe
 					"`mini_uuid` as the group's id. The two are generated independently, so one cannot be " +
 					"derived from the other, and no API returns the UUID. Passing a `mini_uuid` here fails " +
 					"with `group_id: Invalid UUID`.\n\n  " +
-					"Until an endpoint exposes it, a group subject needs a UUID obtained some other way. " +
+					"Until an endpoint exposes it, the UUID has to come from the warehouse: it is the primary " +
+					"key of the `user_groups` row. " +
 					"Exactly one of `user_id` or `group_id`.",
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`),
+						"must be a UUID, not the eight-character id that omni_user_group.id holds. This "+
+							"endpoint is the only group-scoped one in the API that identifies a group by its "+
+							"UUID primary key; model roles, folder and document permissions and SCIM all take "+
+							"the short id. The two are generated independently and no endpoint returns the "+
+							"UUID, so it cannot be a reference to a group this configuration created",
+					),
+				},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"values": schema.ListAttribute{

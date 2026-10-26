@@ -139,6 +139,30 @@ resource "omni_user_attribute_selectable_values" "test" {
 	})
 }
 
+// A mini_uuid in group_id is rejected at plan time rather than by the API.
+//
+// This is the mistake the resource invites: every other group-scoped resource
+// in the provider takes omni_user_group.id, so reaching for it here is the
+// natural thing to do, and the API's answer is a bare "group_id: Invalid UUID"
+// partway through an apply. The validator turns that into a plan-time error
+// that explains itself.
+//
+// Vcf6fCLU is the shape SCIM returns, eight characters, not a real group here.
+// Nothing is created: the plan fails before any request is made.
+func TestAccUserAttributeSelectableValues_groupIDMustBeUUID(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccSelectableValuesConfig(accIdentifier("sv"), "Vcf6fCLU", `["anz"]`, false),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`must be a UUID, not the eight-character id`),
+			},
+		},
+	})
+}
+
 func testAccSelectableValuesConfig(name, groupUUID, values string, allowAny bool) string {
 	// No omni_user_group here. A group this created would carry a mini_uuid
 	// as its id, which this endpoint rejects, so the subject has to be a UUID
