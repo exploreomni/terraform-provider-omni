@@ -339,7 +339,7 @@ reliably revoke access. It works only if the connection's `base_role` is
 
 | | |
 | --- | --- |
-| Inconsistent identifiers | A group is `uoFHWGHz` via SCIM and a full UUID in a permissions permit. Correlating them costs a name lookup per group on every read. |
+| Inconsistent identifiers | A group has two: the eight-character id SCIM returns, and a UUID primary key. Every group-scoped endpoint takes the eight-character one, including permissions permits, which report it as `userGroupId` even while reporting a real UUID as `userId` for a user in the same response. Only `/v1/user-attributes/{id}/selectable-values` wants the UUID, and nothing returns it, so a group subject there cannot be a reference to a group the configuration created. |
 | No rate limit headers | No `X-RateLimit-*` or `Retry-After`, so every client guesses its backoff. |
 | Partial, inconsistent write responses | Create omits `url`; update omits `url` and `scope`; permits nest `role` under `direct` where the schema shows it flat. Seven of the findings in the test plan trace to this. The cheap fix is making the documented schema match reality. |
 | No get-by-id for models or user attributes | `GET /v1/folders/{id}` works. The equivalent paths for models and user attributes are registered for `PATCH` and `DELETE` only, so a `GET` returns `400 Unexpected Server Error` instead of a 404, and reads have to page a list and match. |

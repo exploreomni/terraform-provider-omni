@@ -27,7 +27,10 @@ jobs:
           # Assembled from two pieces so this file does not itself contain the
           # literal pattern and match its own check.
           PATTERN='$''(OWNER)'
-          if grep -rnF "$PATTERN" . --exclude-dir=.git --exclude=Makefile; then
+          # CHANGELOG.md is excluded for the same reason as the Makefile: the
+          # placeholder legitimately appears there, in the 0.1.1 entry that
+          # records having removed it everywhere else.
+          if grep -rnF "$PATTERN" . --exclude-dir=.git --exclude=Makefile --exclude=CHANGELOG.md; then
             echo "Unsubstituted placeholder found. Run: make rename OWNER=exploreomni" >&2
             exit 1
           fi
