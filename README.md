@@ -216,6 +216,22 @@ configuration.
 Building the provider, running the acceptance suite and regenerating the
 registry documentation are covered in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Support
+
+Open an issue for a bug or a feature request. For anything that needs a private
+channel, including a security report, write to <ps@omni.co>, which is the
+maintaining team's address rather than an individual's.
+
+Response targets:
+
+| Severity | First response |
+| --- | --- |
+| Critical, meaning the provider is unusable or a security issue | 2 business days |
+| Everything else | 5 business days |
+
+A fix for a confirmed critical issue goes out in the next patch release. See
+[SECURITY.md](SECURITY.md) for how to report a vulnerability.
+
 ## Known limitations
 
 These are properties of the Omni API, not things left undone. Each one is recorded with its

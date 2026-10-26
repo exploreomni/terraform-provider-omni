@@ -35,6 +35,10 @@ Please include:
 - For a confirmed issue, a fix or a documented mitigation in the next patch
   release, and credit in the advisory unless you ask us not to
 
+Reports are owned by <ps@omni.co>, Omni's professional services team, rather
+than by one maintainer, so a response does not depend on any individual being
+available.
+
 ## Scope
 
 This policy covers the provider in this repository. A vulnerability in the Omni
