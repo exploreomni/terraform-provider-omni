@@ -6,6 +6,84 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+None of this has reached the Terraform Registry. Ingestion has been broken since
+0.1.0, so the published provider does not include any of it. See
+[hashicorp/terraform-registry-support#73](https://github.com/hashicorp/terraform-registry-support/issues/73).
+
+### Added
+
+- `omni_dbt_configuration` - attaches a dbt project to a connection. One per
+  connection: the API exposes a single `PUT` with no separate create, so
+  applying it to a connection that already has dbt configured replaces that
+  configuration rather than failing.
+- `omni_dbt_environment` - a dbt environment routing queries to another target
+  schema. Variables are given as two maps, `variables` and `secret_variables`,
+  rather than a nested block; a name may appear in only one of them.
+- `environment_user_attribute_name` and
+  `environment_user_attribute_default_values` on `omni_connection` - the base
+  connection's environment user attribute, which previously could only be set
+  in the UI. A deployment using `omni_connection_environment` is now
+  reproducible from configuration alone.
+- A published support channel and response targets, in the README and
+  `SECURITY.md`.
+
+### Changed
+
+- The documented API limitations were tested against a live instance rather
+  than assumed, and four were wrong. Folders do have a get-by-id route and the
+  provider already used it, so reads do not page a list except as a fallback.
+  The base connection's environment user attribute is settable over the API, so
+  it was never a UI-only field. The API reference's nested
+  `environmentUserAttribute` body is the one that works; the worked guide's flat
+  keys are rejected outright. And a permissions permit identifies a group by its
+  eight-character id, not by a UUID.
+- Two limitations were confirmed rather than corrected: there is no get-by-id
+  route for models or user attributes, and no read endpoint for connection
+  environments. Those paths answer a `GET` with a generic `400` because they are
+  registered for other verbs, while a genuinely unknown path returns a clean
+  `404`.
+
+### Fixed
+
+- The security contact in `SECURITY.md` was a placeholder, so the email
+  fallback in a public security policy went nowhere.
+
+### Known limitations
+
+- **Setting a dbt environment on a model branch is not implemented.**
+  `POST /v1/models/{id}/branch/{branch}/dbt` has no matching read, so a resource
+  for it could not detect drift at all.
+- **Secret dbt variable values are not read back.** The API returns `null` for a
+  secret value, so adding or removing a key is detected but changing a value is
+  not.
+- **System user attributes have no ID.** `GET /v1/user-attributes` returns an
+  empty `id` for every `system: true` attribute, so those can only be referenced
+  by name.
+
+## [0.1.1] - 2026-10-22
+
+Released on GitHub but never ingested by the Terraform Registry, which still
+serves 0.1.0. Nothing in this release is installable; its contents carry forward
+into the next one that reaches the registry.
+
+### Fixed
+
+- The provider `source` address in the published documentation, in every example
+  and across the reference deployment was an unsubstituted `$(OWNER)`
+  placeholder, so a user copying the install snippet got a configuration that
+  could not resolve the provider. CI now fails on an unsubstituted placeholder.
+
+### Added
+
+- Examples for the ten resources that had none, and regenerated registry
+  documentation carrying them.
+- `CONTRIBUTING.md`, `SECURITY.md` and issue templates.
+
+### Changed
+
+- The README was rewritten as a user-facing front page, with the maintainer and
+  deployment CI/CD material moved into `docs/`.
+
 ## [0.1.0] - 2026-10-19
 
 First public release, published to the Terraform Registry as
@@ -60,5 +138,6 @@ request open with Omni's product team.
   values from that provider's attribute mapping. See
   [docs/SCIM-COEXISTENCE.md](docs/SCIM-COEXISTENCE.md).
 
-[Unreleased]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/exploreomni/terraform-provider-omni/releases/tag/v0.1.0

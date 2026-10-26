@@ -294,10 +294,17 @@ left alone.
 
 ## Roadmap
 
-dbt configuration and dbt environments, email-only users, a `omni_user_attribute_group_allowed_values`
-resource for the group allowed-values endpoint, the base connection's environment user attribute so
-dynamic connections can be configured end to end, and data-source-backed references so a deployment
-can point at objects an existing instance already has.
+Email-only users, for schedule recipients who hold no Omni seat, and
+data-source-backed references so a deployment can point at objects an existing
+instance already has.
+
+dbt configuration and environments, and the base connection's environment user
+attribute, are done and are described above.
+
+A separate resource for group allowed values was planned and then dropped.
+`omni_user_attribute_selectable_values` already covers both subjects through the
+same endpoint, so a second resource would have shared it for no gain. What
+blocks that path is the identifier, not the resource: see the limitation above.
 
 ## License
 
