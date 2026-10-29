@@ -24,9 +24,10 @@ import (
 const dbtConnectionEnv = "OMNI_TEST_CONNECTION_ID"
 
 // What the resource reports when a variable name appears in both variables and
-// secret_variables. Matched on the explanation rather than the summary, which
-// framework versions have changed before.
-var regexpDuplicateDbtVariable = regexp.MustCompile(`can only appear in one of them`)
+// secret_variables. Matched on the summary, which this provider writes and
+// which Terraform never wraps. The detail text wraps at about 80 columns, and
+// the first version of this pattern straddled a wrap and never matched.
+var regexpDuplicateDbtVariable = regexp.MustCompile(`Duplicate dbt variable`)
 
 // A dbt configuration through its whole lifecycle.
 //
@@ -103,26 +104,30 @@ func TestAccDbtEnvironment_variablesUpdateInPlace(t *testing.T) {
 		CheckDestroy:             testAccCheckDbtEnvironmentDestroyed(connectionID),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDbtEnvironmentConfig(connectionID, name, "analytics_staging", `lookback_days = "30"`),
+				Config: testAccDbtEnvironmentConfig(connectionID, name, "analytics_staging", `DBT_LOOKBACK_DAYS = "30"`),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("omni_dbt_environment.test", "name", name),
 					resource.TestCheckResourceAttr("omni_dbt_environment.test", "target_schema", "analytics_staging"),
-					resource.TestCheckResourceAttr("omni_dbt_environment.test", "variables.lookback_days", "30"),
+					resource.TestCheckResourceAttr("omni_dbt_environment.test", "variables.DBT_LOOKBACK_DAYS", "30"),
 					resource.TestCheckResourceAttrSet("omni_dbt_environment.test", "id"),
-					// Omni decides this; the provider cannot set it.
-					resource.TestCheckResourceAttr("omni_dbt_environment.test", "is_default_environment", "false"),
+					// The first environment on a configuration becomes its default.
+					// That matters for destroy: Omni refuses to delete a default on its
+					// own, so this case's teardown exercises the path that drops it from
+					// state with a warning and leaves the configuration delete to remove
+					// it. A false here would mean that path went untested.
+					resource.TestCheckResourceAttr("omni_dbt_environment.test", "is_default_environment", "true"),
 				),
 			},
 			{
-				Config:   testAccDbtEnvironmentConfig(connectionID, name, "analytics_staging", `lookback_days = "30"`),
+				Config:   testAccDbtEnvironmentConfig(connectionID, name, "analytics_staging", `DBT_LOOKBACK_DAYS = "30"`),
 				PlanOnly: true,
 			},
 			{
-				Config: testAccDbtEnvironmentConfig(connectionID, name, "analytics_staging", `lookback_days = "7"`),
+				Config: testAccDbtEnvironmentConfig(connectionID, name, "analytics_staging", `DBT_LOOKBACK_DAYS = "7"`),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("omni_dbt_environment.test", "variables.lookback_days", "7"),
+					resource.TestCheckResourceAttr("omni_dbt_environment.test", "variables.DBT_LOOKBACK_DAYS", "7"),
 					resource.TestCheckResourceAttr("omni_dbt_environment.test", "variables.%", "1"),
-					checkDbtVariableCount(connectionID, "lookback_days", 1),
+					checkDbtVariableCount(connectionID, "DBT_LOOKBACK_DAYS", 1),
 				),
 			},
 		},
@@ -147,7 +152,7 @@ func TestAccDbtEnvironment_secretVariableHasNoPerpetualDiff(t *testing.T) {
 			{
 				Config: testAccDbtEnvironmentSecretConfig(connectionID, name, "s3cret"),
 				Check: resource.TestCheckResourceAttr(
-					"omni_dbt_environment.test", "secret_variables.external_api_key", "s3cret"),
+					"omni_dbt_environment.test", "secret_variables.DBT_EXTERNAL_API_KEY", "s3cret"),
 			},
 			{
 				Config:   testAccDbtEnvironmentSecretConfig(connectionID, name, "s3cret"),
@@ -174,15 +179,35 @@ resource "omni_dbt_environment" "test" {
   target_schema = "analytics_clash"
 
   variables = {
-    shared = "plain"
+    DBT_SHARED = "plain"
   }
 
   secret_variables = {
-    shared = "secret"
+    DBT_SHARED = "secret"
   }
 }
 `, connectionID, accIdentifier("dbtclash")),
 				ExpectError: regexpDuplicateDbtVariable,
+			},
+		},
+	})
+}
+
+// Variable names must start with DBT_ and use only letters, digits and
+// underscores. The API enforces that with a 400 on create, and the reference
+// documentation does not mention it, so the provider checks it at plan time
+// instead of failing partway through an apply.
+func TestAccDbtEnvironment_variableNameMustStartWithDBT(t *testing.T) {
+	connectionID := requireEnv(t, dbtConnectionEnv)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      testAccDbtEnvironmentConfig(connectionID, accIdentifier("dbtname"), "analytics_names", `lookback_days = "30"`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`must start with DBT_`),
 			},
 		},
 	})
@@ -232,7 +257,7 @@ resource "omni_dbt_environment" "test" {
   target_schema = "analytics_secret"
 
   secret_variables = {
-    external_api_key = %[3]q
+    DBT_EXTERNAL_API_KEY = %[3]q
   }
 }
 `, testAccDbtConfigurationConfig(connectionID, "main", true), name, secret)

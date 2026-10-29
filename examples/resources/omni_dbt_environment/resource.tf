@@ -7,8 +7,9 @@ resource "omni_dbt_environment" "staging" {
   # itself, so a partial build is still queryable.
   is_deferral_enabled = true
 
+  # Names must start with DBT_; the API rejects anything else.
   variables = {
-    lookback_days = "30"
+    DBT_LOOKBACK_DAYS = "30"
   }
 }
 
@@ -25,13 +26,13 @@ resource "omni_dbt_environment" "developer" {
   target_role     = "TRANSFORMER_DEV"
 
   variables = {
-    lookback_days = "7"
+    DBT_LOOKBACK_DAYS = "7"
   }
 
   # Omni returns null for a secret value, so Terraform cannot detect drift on
   # these. Adding or removing a key is detected; changing a value is not.
   secret_variables = {
-    external_api_key = var.dbt_external_api_key
+    DBT_EXTERNAL_API_KEY = var.dbt_external_api_key
   }
 }
 

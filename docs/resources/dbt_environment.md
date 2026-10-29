@@ -4,11 +4,14 @@ page_title: "omni_dbt_environment Resource - omni"
 subcategory: ""
 description: |-
   A dbt environment on a connection, routing queries to a different target schema. Requires omni_dbt_configuration on the same connection, with enable_virtual_schemas set.
+  The first environment created on a configuration becomes its default, reported by is_default_environment. Omni does not allow a default environment to be deleted on its own: destroying one removes it from state with a warning, and the environment itself is deleted when the omni_dbt_configuration is destroyed.
 ---
 
 # omni_dbt_environment (Resource)
 
 A dbt environment on a connection, routing queries to a different target schema. Requires `omni_dbt_configuration` on the same connection, with `enable_virtual_schemas` set.
+
+The first environment created on a configuration becomes its default, reported by `is_default_environment`. Omni does not allow a default environment to be deleted on its own: destroying one removes it from state with a warning, and the environment itself is deleted when the `omni_dbt_configuration` is destroyed.
 
 ## Example Usage
 
@@ -22,8 +25,9 @@ resource "omni_dbt_environment" "staging" {
   # itself, so a partial build is still queryable.
   is_deferral_enabled = true
 
+  # Names must start with DBT_; the API rejects anything else.
   variables = {
-    lookback_days = "30"
+    DBT_LOOKBACK_DAYS = "30"
   }
 }
 
@@ -40,13 +44,13 @@ resource "omni_dbt_environment" "developer" {
   target_role     = "TRANSFORMER_DEV"
 
   variables = {
-    lookback_days = "7"
+    DBT_LOOKBACK_DAYS = "7"
   }
 
   # Omni returns null for a secret value, so Terraform cannot detect drift on
   # these. Adding or removing a key is detected; changing a value is not.
   secret_variables = {
-    external_api_key = var.dbt_external_api_key
+    DBT_EXTERNAL_API_KEY = var.dbt_external_api_key
   }
 }
 
@@ -70,11 +74,11 @@ variable "dbt_external_api_key" {
 
 - `is_deferral_enabled` (Boolean) Defer to the production environment for models this environment has not built. The API forces this to `false` on the default environment.
 - `owner_id` (String) Makes this a personal environment belonging to one user. Leave unset for an environment shared across the organization.
-- `secret_variables` (Map of String, Sensitive) Secret dbt variables, keyed by variable name. The API returns `null` for a secret value, so drift on these values is not detected: only adding or removing a key is. Omni stores these separately from `variables`, and a name must not appear in both.
+- `secret_variables` (Map of String, Sensitive) Secret dbt variables, keyed by variable name. Names must start with `DBT_`. The API returns `null` for a secret value, so drift on these values is not detected: only adding or removing a key is. Omni stores these separately from `variables`, and a name must not appear in both.
 - `target_database` (String) Overrides the connection's database for this environment.
 - `target_name` (String) dbt target name, matching a target in the project's `profiles.yml`.
 - `target_role` (String) Overrides the warehouse role queries in this environment run as.
-- `variables` (Map of String) Non-secret dbt variables, keyed by variable name. Values are readable from the API, so drift on them is detected.
+- `variables` (Map of String) Non-secret dbt variables, keyed by variable name. Names must start with `DBT_`. Values are readable from the API, so drift on them is detected.
 
 ### Read-Only
 

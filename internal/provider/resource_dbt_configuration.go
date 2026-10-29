@@ -88,7 +88,9 @@ func (r *dbtConfigurationResource) Schema(_ context.Context, _ resource.SchemaRe
 				Validators:          []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"auth_method": schema.StringAttribute{
-				Optional: true,
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "How Omni authenticates to the repository: `ssh`, `https_token` or " +
 					"`github_app`. `https_token` requires `token`, and `github_app` requires " +
 					"`github_app_installation_id`.",
@@ -102,7 +104,9 @@ func (r *dbtConfigurationResource) Schema(_ context.Context, _ resource.SchemaRe
 				Validators: []validator.String{stringvalidator.LengthAtMost(1000)},
 			},
 			"github_app_installation_id": schema.StringAttribute{
-				Optional: true,
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "Numeric GitHub App installation ID, required when `auth_method` is " +
 					"`github_app`.",
 			},
@@ -133,7 +137,9 @@ func (r *dbtConfigurationResource) Schema(_ context.Context, _ resource.SchemaRe
 				MarkdownDescription: "Import the dbt semantic layer alongside the models.",
 			},
 			"dbt_version": schema.StringAttribute{
-				Optional: true,
+				Optional:      true,
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "dbt version Omni parses the project with. `Auto` tracks the version " +
 					"declared in the project.",
 				Validators: []validator.String{stringvalidator.OneOf("Auto", "1.10", "1.11")},
@@ -145,10 +151,14 @@ func (r *dbtConfigurationResource) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"committer_name": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "Name Omni commits as when it writes back to the repository.",
 			},
 			"committer_email": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 				MarkdownDescription: "Email Omni commits as when it writes back to the repository.",
 			},
 			"supports_dbt": schema.BoolAttribute{
@@ -293,21 +303,21 @@ func applyDbtConfigurationToState(state *dbtConfigurationResourceModel, d *clien
 	if d.Branch != "" {
 		state.Branch = types.StringValue(d.Branch)
 	}
-	if d.AuthMethod != "" {
-		state.AuthMethod = types.StringValue(d.AuthMethod)
+	// These are Optional+Computed because the API supplies them when the
+	// configuration does not: dbtVersion always comes back, as "Auto" by
+	// default, and the rest depend on the auth method. keepKnown takes what
+	// the response carried, keeps a configured value the response omitted,
+	// and resolves an unconfigured, unreturned value to null rather than
+	// leaving it unknown after apply.
+	state.AuthMethod = keepKnown(state.AuthMethod, d.AuthMethod)
+	state.GithubAppInstallationID = keepKnown(state.GithubAppInstallationID, d.GithubAppInstallationID)
+	state.CommitterName = keepKnown(state.CommitterName, d.CommitterName)
+	state.CommitterEmail = keepKnown(state.CommitterEmail, d.CommitterEmail)
+	dbtVersion := ""
+	if d.DbtVersion != nil {
+		dbtVersion = *d.DbtVersion
 	}
-	if d.GithubAppInstallationID != "" {
-		state.GithubAppInstallationID = types.StringValue(d.GithubAppInstallationID)
-	}
-	if d.CommitterName != "" {
-		state.CommitterName = types.StringValue(d.CommitterName)
-	}
-	if d.CommitterEmail != "" {
-		state.CommitterEmail = types.StringValue(d.CommitterEmail)
-	}
-	if d.DbtVersion != nil && *d.DbtVersion != "" {
-		state.DbtVersion = types.StringValue(*d.DbtVersion)
-	}
+	state.DbtVersion = keepKnown(state.DbtVersion, dbtVersion)
 	if d.ProjectRootPath != nil && *d.ProjectRootPath != "" {
 		state.ProjectRootPath = types.StringValue(*d.ProjectRootPath)
 	}

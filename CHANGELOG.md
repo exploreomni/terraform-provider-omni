@@ -53,6 +53,10 @@ None of this has reached the Terraform Registry. Ingestion has been broken since
 - **Setting a dbt environment on a model branch is not implemented.**
   `POST /v1/models/{id}/branch/{branch}/dbt` has no matching read, so a resource
   for it could not detect drift at all.
+- **A default dbt environment cannot be destroyed on its own.** The first
+  environment on a configuration becomes its default, and Omni refuses to delete
+  it. Destroying one drops it from state with a warning; it is deleted along
+  with its `omni_dbt_configuration`.
 - **Secret dbt variable values are not read back.** The API returns `null` for a
   secret value, so adding or removing a key is detected but changing a value is
   not.
