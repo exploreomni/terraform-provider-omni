@@ -301,4 +301,35 @@ func init() {
 			return nil
 		},
 	})
+
+	resource.AddTestSweepers("omni_connection", &resource.Sweeper{
+		Name: "omni_connection",
+		// Tests create their own throwaway connections now: Omni stores a
+		// connection without testing its credentials, so no real warehouse is
+		// needed. A run that fails before destroy leaves one behind.
+		//
+		// Nothing beneath a connection needs a sweeper of its own. Deleting a
+		// connection takes its dbt configuration with it, and deleting a dbt
+		// configuration takes every environment beneath it, default included.
+		F: func(string) error {
+			c, err := sweepClient()
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			connections, err := c.ListConnections(ctx)
+			if err != nil {
+				return err
+			}
+			for _, conn := range connections {
+				if conn.DeletedAt != "" || !sweptName(conn.Name) {
+					continue
+				}
+				if err := c.DeleteConnection(ctx, conn.ID); err != nil && !client.IsNotFound(err) {
+					return fmt.Errorf("deleting connection %s: %w", conn.Name, err)
+				}
+			}
+			return nil
+		},
+	})
 }
