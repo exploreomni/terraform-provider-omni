@@ -3,9 +3,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // DbtVariable is one variable on a dbt environment.
@@ -13,9 +15,13 @@ import (
 // Value is a pointer because the API returns null for a secret variable rather
 // than omitting it, and because sending null on an update is how you keep the
 // current value instead of clearing it.
+//
+// On update, an existing variable is identified by ID alone. The API rejects
+// name alongside an id with "variables: Unrecognized key: name", so Name is
+// omitted when empty and callers leave it empty for a variable that has an ID.
 type DbtVariable struct {
 	ID       string  `json:"id,omitempty"`
-	Name     string  `json:"name"`
+	Name     string  `json:"name,omitempty"`
 	Value    *string `json:"value"`
 	IsSecret bool    `json:"isSecret"`
 }
@@ -142,31 +148,67 @@ func (c *Client) DeleteDbtConfiguration(ctx context.Context, connectionID string
 
 // ListDbtEnvironments returns every dbt environment on a connection.
 //
-// The documented response is a bare array. Other list endpoints on this API
-// wrap their records, and at least one varies by deployment, so both shapes are
-// accepted rather than assuming one.
+// The reference documents a bare array. In practice the endpoint returns a
+// paginated object, {pageInfo, records}, twenty to a page. Both shapes are
+// accepted, and pages are followed by cursor: reading only the first page
+// would make an environment beyond the twentieth look deleted, and Terraform
+// would drop it from state.
 func (c *Client) ListDbtEnvironments(ctx context.Context, connectionID string) ([]DbtEnvironment, error) {
-	var raw json.RawMessage
-	if err := c.Get(ctx, dbtEnvironmentsPath(connectionID), nil, &raw); err != nil {
-		return nil, err
-	}
+	var all []DbtEnvironment
+	cursor := ""
 
-	var bare []DbtEnvironment
-	if err := json.Unmarshal(raw, &bare); err == nil {
-		return bare, nil
-	}
+	for {
+		var query url.Values
+		if cursor != "" {
+			query = url.Values{}
+			query.Set("cursor", cursor)
+		}
 
-	var wrapped struct {
-		Records      []DbtEnvironment `json:"records"`
-		Environments []DbtEnvironment `json:"environments"`
+		var raw json.RawMessage
+		if err := c.Get(ctx, dbtEnvironmentsPath(connectionID), query, &raw); err != nil {
+			return nil, err
+		}
+
+		var bare []DbtEnvironment
+		if err := json.Unmarshal(raw, &bare); err == nil {
+			return append(all, bare...), nil
+		}
+
+		var page struct {
+			Records      []DbtEnvironment `json:"records"`
+			Environments []DbtEnvironment `json:"environments"`
+			PageInfo     struct {
+				HasNextPage bool    `json:"hasNextPage"`
+				NextCursor  *string `json:"nextCursor"`
+			} `json:"pageInfo"`
+		}
+		if err := json.Unmarshal(raw, &page); err != nil {
+			return nil, err
+		}
+		all = append(all, page.Records...)
+		all = append(all, page.Environments...)
+
+		if !page.PageInfo.HasNextPage || page.PageInfo.NextCursor == nil || *page.PageInfo.NextCursor == "" {
+			return all, nil
+		}
+		cursor = *page.PageInfo.NextCursor
 	}
-	if err := json.Unmarshal(raw, &wrapped); err != nil {
-		return nil, err
+}
+
+// IsDefaultDbtEnvironmentRefusal reports whether err is the API refusing to
+// delete a configuration's default environment.
+//
+// The first environment created on a dbt configuration becomes its default,
+// and the default cannot be deleted on its own: the API answers 400 "Cannot
+// delete the repo's default environment". It is removed with the
+// configuration, which deletes every environment beneath it.
+func IsDefaultDbtEnvironmentRefusal(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
 	}
-	if len(wrapped.Records) > 0 {
-		return wrapped.Records, nil
-	}
-	return wrapped.Environments, nil
+	return apiErr.StatusCode == http.StatusBadRequest &&
+		strings.Contains(strings.ToLower(apiErr.Message+" "+apiErr.Body), "default environment")
 }
 
 // GetDbtEnvironment finds one environment by ID.

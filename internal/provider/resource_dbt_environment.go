@@ -3,8 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -23,6 +25,17 @@ var (
 	_ resource.ResourceWithConfigure   = &dbtEnvironmentResource{}
 	_ resource.ResourceWithImportState = &dbtEnvironmentResource{}
 )
+
+// dbtVariableNameValidators enforces the API's naming rule for dbt variables.
+// The create endpoint rejects any other name with a 400, and the reference
+// documentation does not state the rule, so it is checked at plan time.
+var dbtVariableNameValidators = []validator.Map{
+	mapvalidator.KeysAre(stringvalidator.RegexMatches(
+		regexp.MustCompile(`^DBT_[A-Za-z0-9_]*$`),
+		"must start with DBT_ and contain only letters, digits and underscores, which is what the "+
+			"Omni API accepts for a dbt variable name",
+	)),
+}
 
 // NewDbtEnvironmentResource returns the omni_dbt_environment resource.
 func NewDbtEnvironmentResource() resource.Resource { return &dbtEnvironmentResource{} }
@@ -58,7 +71,11 @@ func (r *dbtEnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A dbt environment on a connection, routing queries to a different target " +
 			"schema. Requires `omni_dbt_configuration` on the same connection, with " +
-			"`enable_virtual_schemas` set.",
+			"`enable_virtual_schemas` set.\n\n" +
+			"The first environment created on a configuration becomes its default, reported by " +
+			"`is_default_environment`. Omni does not allow a default environment to be deleted on " +
+			"its own: destroying one removes it from state with a warning, and the environment " +
+			"itself is deleted when the `omni_dbt_configuration` is destroyed.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -113,14 +130,16 @@ func (r *dbtEnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequ
 			"variables": schema.MapAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				MarkdownDescription: "Non-secret dbt variables, keyed by variable name. Values are " +
+				Validators:  dbtVariableNameValidators,
+				MarkdownDescription: "Non-secret dbt variables, keyed by variable name. Names must start with `DBT_`. Values are " +
 					"readable from the API, so drift on them is detected.",
 			},
 			"secret_variables": schema.MapAttribute{
 				Optional:    true,
 				Sensitive:   true,
 				ElementType: types.StringType,
-				MarkdownDescription: "Secret dbt variables, keyed by variable name. The API returns `null` " +
+				Validators:  dbtVariableNameValidators,
+				MarkdownDescription: "Secret dbt variables, keyed by variable name. Names must start with `DBT_`. The API returns `null` " +
 					"for a secret value, so drift on these values is not detected: only adding or removing " +
 					"a key is. Omni stores these separately from `variables`, and a name must not appear " +
 					"in both.",
@@ -245,7 +264,25 @@ func (r *dbtEnvironmentResource) Delete(ctx context.Context, req resource.Delete
 	}
 
 	err := r.client.DeleteDbtEnvironment(ctx, state.ConnectionID.ValueString(), state.ID.ValueString())
-	if err != nil && !client.IsNotFound(err) {
+	switch {
+	case err == nil, client.IsNotFound(err):
+		return
+	case client.IsDefaultDbtEnvironmentRefusal(err):
+		// The first environment on a configuration becomes its default, and the
+		// API will not delete a default on its own. It goes when the
+		// configuration does. Failing here would block exactly that: Terraform
+		// destroys the environment before the configuration it depends on, so
+		// an error would stop the delete that removes it. Dropping it from state
+		// with a warning lets the configuration delete finish the job.
+		resp.Diagnostics.AddWarning(
+			"dbt environment left in place as the configuration's default",
+			fmt.Sprintf("Environment %q is the default environment of its dbt configuration, which "+
+				"Omni does not allow to be deleted on its own. It has been removed from Terraform "+
+				"state and will be deleted when the omni_dbt_configuration on this connection is "+
+				"destroyed. If that configuration stays, so does this environment.",
+				state.Name.ValueString()),
+		)
+	default:
 		resp.Diagnostics.AddError("Unable to delete the Omni dbt environment", err.Error())
 	}
 }
@@ -302,12 +339,22 @@ func dbtVariablesFromPlan(ctx context.Context, plan dbtEnvironmentResourceModel,
 		ids[variable.Name] = variable.ID
 	}
 
+	// A variable already on the environment is sent by id with no name: the
+	// update endpoint identifies it by id and rejects a name beside one. A new
+	// variable has no id yet and is sent by name.
+	variable := func(name, value string, secret bool) client.DbtVariable {
+		if id := ids[name]; id != "" {
+			return client.DbtVariable{ID: id, Value: &value, IsSecret: secret}
+		}
+		return client.DbtVariable{Name: name, Value: &value, IsSecret: secret}
+	}
+
 	out := make([]client.DbtVariable, 0, len(plainValues)+len(secretValues))
 	for name, value := range plainValues {
-		out = append(out, client.DbtVariable{ID: ids[name], Name: name, Value: &value, IsSecret: false})
+		out = append(out, variable(name, value, false))
 	}
 	for name, value := range secretValues {
-		out = append(out, client.DbtVariable{ID: ids[name], Name: name, Value: &value, IsSecret: true})
+		out = append(out, variable(name, value, true))
 	}
 	return out, diags
 }
