@@ -4,6 +4,12 @@ terraform {
   required_providers {
     omni = {
       source = "exploreomni/omni"
+
+      # 0.2.1 is the first release whose selectable values take the group's
+      # short id, which attributes.auto.tfvars relies on. A floor rather than
+      # an open constraint, so init fails loudly instead of quietly installing
+      # an older provider the registry is still serving from cache.
+      version = ">= 0.2.1"
     }
   }
 
