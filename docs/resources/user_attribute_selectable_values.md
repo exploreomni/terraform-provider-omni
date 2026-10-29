@@ -39,13 +39,9 @@ resource "omni_user_attribute_selectable_values" "ashima_region" {
 resource "omni_user_attribute_selectable_values" "analysts_region" {
   user_attribute_id = omni_user_attribute.region.id
 
-  # Not omni_user_group.id. This endpoint wants the group's UUID primary key,
-  # while SCIM and every other group-scoped endpoint - model roles, folder and
-  # document permissions - use an eight-character mini_uuid. The two are
-  # generated independently, nothing converts between them, and no endpoint
-  # returns the UUID, so it has to be a literal until one does. Passing a
-  # mini_uuid here fails with "group_id: Invalid UUID".
-  group_id = "5a7b9d67-cd43-4724-a9cd-30bf1bbbd847"
+  # The eight-character id SCIM reports, the same one every other
+  # group-scoped resource takes. A UUID is rejected.
+  group_id = omni_user_group.analysts.id
 
   values = ["anz", "apac", "emea"]
 
@@ -66,9 +62,9 @@ resource "omni_user_attribute_selectable_values" "analysts_region" {
 ### Optional
 
 - `allow_any_value` (Boolean) Whether the subject may switch to a value that is not listed. When true, `values` are suggestions rather than a limit, and the access this grants is bounded only by what the attribute means to the filters using it.
-- `group_id` (String) The group to provision for. **Not `omni_user_group.id`.** This endpoint wants the group's UUID primary key, while SCIM - and every other group-scoped endpoint in the API, including model roles and folder permissions - uses an eight-character `mini_uuid` as the group's id. The two are generated independently, so one cannot be derived from the other, and no API returns the UUID. Passing a `mini_uuid` here fails with `group_id: Invalid UUID`.
+- `group_id` (String) The group to provision for, from `omni_user_group.id`. Exactly one of `user_id` or `group_id`.
 
-  Until an endpoint exposes it, the UUID has to come from the warehouse: it is the primary key of the `user_groups` row. Exactly one of `user_id` or `group_id`.
+  Until late October 2026 this endpoint identified a group by its UUID primary key, which no API returns. It now takes the eight-character id SCIM reports, like every other group-scoped endpoint, and answers a UUID with `404 User group does not exist`. A UUID is rejected at plan time for that reason.
 - `user_id` (String) The user to provision for, from `omni_user.id`.
 
   The API documents this as "the membership id, not the user id", which reads as a warning against the id Terraform holds. It is not: a person in Omni has a User row and a Membership row with different UUIDs, and SCIM - which is what `omni_user` reads and writes - is keyed by the membership. So `omni_user.id` is the right handle. Confirmed against a live instance; see finding 38.

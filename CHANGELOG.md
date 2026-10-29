@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `omni_user_attribute_selectable_values.group_id` now takes `omni_user_group.id`.
+  Omni moved the endpoint onto the group's eight-character id in late October
+  2026 and now answers the UUID it used to require with `404 User group does
+  not exist`, which broke every apply with a group subject. A UUID is rejected
+  at plan time with a message pointing at the value to use. Existing state
+  holding a UUID reads as gone on the next refresh and is provisioned again
+  under the short id.
+
 ## [0.2.0] - 2026-10-29
 
 ### Added
@@ -125,11 +135,6 @@ request open with Omni's product team.
   `NO_ACCESS` instead. Note that `NO_ACCESS` is not revocation: Omni resolves
   roles by priority, and a connection's base role outranks a destroyed direct
   assignment.
-- **A group subject for selectable values needs a literal UUID.** That endpoint
-  identifies a group by its UUID primary key while every other group-scoped
-  endpoint uses the eight-character id that `omni_user_group.id` holds. The two
-  are generated independently and no endpoint returns the UUID, so it cannot be
-  a reference.
 - **Connection environments cannot be read.** Create, update and delete work;
   without a read endpoint the provider cannot detect drift on them.
 - **Custom roles are invisible to the API.** Only built-in roles can be

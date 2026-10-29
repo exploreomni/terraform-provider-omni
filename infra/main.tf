@@ -235,10 +235,9 @@ module "selectable_values" {
     for k, v in var.attribute_selectable_values : k => {
       user_attribute_id = module.user_attributes.ids[v.attribute]
 
-      # A literal UUID, not module.access.group_ids. That map holds the
-      # eight-character id SCIM reports, which every other endpoint takes and
-      # this one rejects. Finding 43.
-      group_id = v.group_uuid
+      # The group's eight-character id, like every other group-scoped
+      # endpoint. This one wanted a UUID until late October 2026. Finding 43.
+      group_id = v.group == null ? null : module.access.group_ids[v.group]
 
       # The endpoint wants the user's membership ID. omni_user.id is the handle
       # the provider reads a user by, which is membership-scoped, so it is very

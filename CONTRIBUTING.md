@@ -59,7 +59,6 @@ itself. A case skips rather than fails when its fixture is unset:
 | `OMNI_TEST_CONNECTION_ID` | A connection to assign connection-scoped roles on |
 | `OMNI_TEST_MODEL_ID` | A model to assign model-scoped roles on |
 | `OMNI_TEST_MEMBER_USER_ID` | A user's membership id, as SCIM reports it |
-| `OMNI_TEST_GROUP_UUID` | A group's UUID primary key, which no endpoint returns |
 
 Everything the suite creates is named `tfacc-<run token>-...`. If a run fails
 hard it can leave objects behind, so there is a sweeper:

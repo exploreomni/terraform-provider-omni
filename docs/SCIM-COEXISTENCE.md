@@ -99,9 +99,9 @@ attribute to, and it works on an IdP-managed group:
 ```hcl
 attribute_selectable_values = {
   "analysts-region" = {
-    attribute  = "region"
-    group_uuid = "5a7b9d67-cd43-4724-a9cd-30bf1bbbd847"
-    values     = ["anz", "apac", "emea"]
+    attribute = "region"
+    group     = "analysts"
+    values    = ["anz", "apac", "emea"]
   }
 }
 ```
@@ -112,11 +112,9 @@ It is not an assignment. It is the set a member may switch *between*, from the
 File menu. Their actual value still comes from the IdP mapping or the
 definition's default. There is no group-assigned value in Omni.
 
-And `group_uuid` is a literal UUID rather than a reference, because this
-endpoint identifies a group by its UUID primary key while every other one -
-including SCIM - uses an eight-character id. See finding 43 in
-[TEST-CASES.md](./TEST-CASES.md) for how to obtain it and why it cannot be a
-reference.
+And the group is a key from `var.groups`, the same as everywhere else. Until
+late October 2026 this endpoint wanted the group's UUID primary key instead;
+see finding 43 in [TEST-CASES.md](./TEST-CASES.md).
 
 ## The hybrid, and why to avoid it
 

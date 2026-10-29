@@ -219,37 +219,20 @@ variable "attribute_selectable_values" {
 
     attribute is a key from var.user_attributes. Exactly one subject:
 
-      group_uuid  a group's UUID. Not a key from var.groups, and not
-                  omni_user_group.id - see the note below.
-      user        an email from var.users.
+      group  a key from var.groups.
+      user   an email from var.users.
 
-    group_uuid is a literal because this endpoint is the only one in the API
-    that identifies a group by its UUID primary key. Every other one - model
-    roles, connection roles, folder and document permissions, SCIM - uses the
-    eight-character mini_uuid that omni_user_group.id holds, and no endpoint
-    converts between them. Finding 43.
-
-    Getting a UUID, in order of preference: query the database
-    (select id, mini_uuid, name from user_groups), or open the group in Omni at
-    /groups/<mini>/<name>/members and take the UUID that appears on that page
-    and no other. Confirm it before using it, because the endpoint answers 200
-    for any group in the organization and provisioning the wrong one grants the
-    wrong people data access:
-
-      curl -s -o /dev/null -w '%%{http_code}\n' \
-        -H "Authorization: Bearer $OMNI_API_TOKEN" \
-        "$OMNI_BASE_URL/api/v1/user-attributes/<attribute id>/selectable-values?groupId=<uuid>"
-
-    A UUID belongs to the group row, so replacing a group makes it stale. That
-    fails the apply with a 404 rather than provisioning quietly, which is the
-    one good thing about this arrangement.
+    Until late October 2026 this endpoint identified a group by its UUID
+    primary key, which no API returns, so this used to take a literal UUID.
+    It now takes the same eight-character id as every other group-scoped
+    endpoint, so a group is referenced by key like everywhere else. Finding 43.
   DESC
 
   type = map(object({
-    attribute  = string
-    group_uuid = optional(string)
-    user       = optional(string)
-    values     = optional(list(string))
+    attribute = string
+    group     = optional(string)
+    user      = optional(string)
+    values    = optional(list(string))
 
     # Whether the subject may switch to a value that is not listed.
     allow_any_value = optional(bool, false)
@@ -260,13 +243,13 @@ variable "attribute_selectable_values" {
   validation {
     condition = alltrue([
       for k, v in var.attribute_selectable_values :
-      (v.group_uuid == null) != (v.user == null)
+      (v.group == null) != (v.user == null)
     ])
     error_message = format(
-      "These entries do not name exactly one subject: %s. Set group_uuid or user, not both and not neither.",
+      "These entries do not name exactly one subject: %s. Set group or user, not both and not neither.",
       join("; ", [
         for k, v in var.attribute_selectable_values : "entry \"${k}\""
-        if(v.group_uuid == null) == (v.user == null)
+        if(v.group == null) == (v.user == null)
       ])
     )
   }
@@ -285,19 +268,16 @@ variable "attribute_selectable_values" {
     )
   }
 
-  # A mini_uuid is eight characters and a UUID is thirty-six, so the common
-  # mistake - passing omni_user_group.id, or a key from var.groups - is caught
-  # here with an explanation rather than by the API with "Invalid UUID".
   validation {
     condition = alltrue([
       for k, v in var.attribute_selectable_values :
-      v.group_uuid == null || can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", lower(coalesce(v.group_uuid, "__unset__"))))
+      v.group == null || contains(keys(var.groups), coalesce(v.group, "__unset__"))
     ])
     error_message = format(
-      "These entries do not give a UUID for group_uuid: %s. This endpoint wants the group's UUID primary key, not the eight-character id that omni_user_group.id holds and that the rest of this configuration uses. See the variable description for how to find it.",
+      "These entries name a group that is not in var.groups: %s.",
       join("; ", [
-        for k, v in var.attribute_selectable_values : "entry \"${k}\" gives \"${v.group_uuid}\""
-        if v.group_uuid != null && !can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", lower(coalesce(v.group_uuid, "__unset__"))))
+        for k, v in var.attribute_selectable_values : "entry \"${k}\" names \"${v.group}\""
+        if v.group != null && !contains(keys(var.groups), coalesce(v.group, "__unset__"))
       ])
     )
   }

@@ -90,25 +90,13 @@ func (r *selectableValuesResource) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"group_id": schema.StringAttribute{
 				Optional: true,
-				MarkdownDescription: "The group to provision for. **Not `omni_user_group.id`.** This endpoint " +
-					"wants the group's UUID primary key, while SCIM - and every other group-scoped endpoint " +
-					"in the API, including model roles and folder permissions - uses an eight-character " +
-					"`mini_uuid` as the group's id. The two are generated independently, so one cannot be " +
-					"derived from the other, and no API returns the UUID. Passing a `mini_uuid` here fails " +
-					"with `group_id: Invalid UUID`.\n\n  " +
-					"Until an endpoint exposes it, the UUID has to come from the warehouse: it is the primary " +
-					"key of the `user_groups` row. " +
-					"Exactly one of `user_id` or `group_id`.",
-				Validators: []validator.String{
-					stringvalidator.RegexMatches(
-						regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`),
-						"must be a UUID, not the eight-character id that omni_user_group.id holds. This "+
-							"endpoint is the only group-scoped one in the API that identifies a group by its "+
-							"UUID primary key; model roles, folder and document permissions and SCIM all take "+
-							"the short id. The two are generated independently and no endpoint returns the "+
-							"UUID, so it cannot be a reference to a group this configuration created",
-					),
-				},
+				MarkdownDescription: "The group to provision for, from `omni_user_group.id`. Exactly one of " +
+					"`user_id` or `group_id`.\n\n  " +
+					"Until late October 2026 this endpoint identified a group by its UUID primary key, " +
+					"which no API returns. It now takes the eight-character id SCIM reports, like every " +
+					"other group-scoped endpoint, and answers a UUID with `404 User group does not " +
+					"exist`. A UUID is rejected at plan time for that reason.",
+				Validators:    []validator.String{notUUIDValidator{}},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"values": schema.ListAttribute{
@@ -296,4 +284,31 @@ func (r *selectableValuesResource) ImportState(ctx context.Context, req resource
 		state.GroupID = types.StringValue(parts[2])
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// notUUIDValidator rejects a group UUID. The selectable-values endpoint used to
+// want one and now refuses it with a 404, so catching it at plan time saves a
+// failed apply and points at the value that works.
+type notUUIDValidator struct{}
+
+func (notUUIDValidator) Description(context.Context) string {
+	return "must be the group's eight-character id, not a UUID"
+}
+
+func (v notUUIDValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (notUUIDValidator) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	if uuidPattern.MatchString(req.ConfigValue.ValueString()) {
+		resp.Diagnostics.AddAttributeError(req.Path, "Group UUID no longer accepted",
+			"Omni now identifies the group by the eight-character id that omni_user_group.id holds, "+
+				"and answers a UUID with 404 User group does not exist. Use omni_user_group.id, or the "+
+				"Group ID column under Settings > Groups.")
+	}
 }

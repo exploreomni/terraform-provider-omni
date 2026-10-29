@@ -208,34 +208,16 @@ access**. It only works if the connection's base role is already `NO_ACCESS`.
 
 **Needed:** `DELETE` on both model-roles endpoints.
 
-### Gap 6b: a group cannot be a selectable-values subject
+### Gap 6b: a group cannot be a selectable-values subject - resolved
 
-`PUT /api/v1/user-attributes/{id}/selectable-values` takes `group_id` as the
-group's UUID primary key. Every other group-scoped endpoint - model roles,
-connection roles, folder and document permissions, SCIM - uses the group's
-eight-character `mini_uuid`, a separately generated column rather than an
-encoding of the UUID.
+`/api/v1/user-attributes/{id}/selectable-values` used to take `group_id` as the
+group's UUID primary key, which no endpoint returns, while every other
+group-scoped endpoint takes the eight-character id SCIM reports.
 
-No endpoint returns the UUID. `GET /api/v1/user-groups` does not exist, SCIM
-reports the `mini_uuid` as the group's `id`, and
-`GET /api/v1/user-groups/{id}/model-roles` echoes the `mini_uuid` back in its
-own `userGroupId` field. A group subject therefore cannot be addressed from
-the API at all, by any client.
-
-Both documents are internally consistent and disagree with each other: this
-endpoint's README calls the field "User group id" and uses a UUID in every
-example, while SCIM calls the mini "id".
-
-The UUID is findable, which makes this survivable rather than fatal: it
-appears in the group's own settings pages and nowhere else in the instance, so
-comparing two group pages identifies it, and a `GET` of this endpoint with it
-answers 200 for a real group. That is a one-off manual step per group, it goes
-stale if the group is recreated, and it is not something a customer should be
-asked to do.
-
-**Needed:** one of - `selectable-values` accepts the `mini_uuid` like its
-neighbours, SCIM returns the UUID alongside it, or `GET /api/v1/user-groups`
-exists and returns both.
+Resolved by Omni in late October 2026, without notice: the endpoint now takes
+the short id and answers the UUID with `404 User group does not exist`. Found by
+the nightly acceptance run on 2026-10-29. `group_id` is now
+`omni_user_group.id`, and a UUID is rejected at plan time.
 
 ### Gap 7: custom roles have no API
 

@@ -22,22 +22,11 @@ import (
 // framework versions. This sentence has not.
 var regexpInvalidCombination = regexp.MustCompile(`Exactly one of these attributes must be configured`)
 
-// Values a group may switch an attribute to.
-//
-// Skipped unless OMNI_TEST_GROUP_UUID is set, and setting it means reading a
-// value out of the database, because no API returns it. The endpoint resolves
-// group_id against user_groups.id, a gen_random_uuid() primary key, while
-// every other group-scoped endpoint in v1 - model roles, connection roles,
-// folder and document permissions - takes the eight-character mini_uuid that
-// SCIM calls the group's id. The two columns are generated independently, so
-// the mini cannot be converted into the UUID by any client.
-//
-// The user path is covered separately below, and needs its own fixture for
-// the opposite reason: a group's UUID is unobtainable, while a user's
-// membership id is simply not something a test can create.
+// Values a group may switch an attribute to, for a group the same
+// configuration creates. This is the case the endpoint could not support while
+// it wanted the group's UUID.
 func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 	name := accIdentifier("sv")
-	groupUUID := requireEnv(t, "OMNI_TEST_GROUP_UUID")
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -45,16 +34,16 @@ func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 		CheckDestroy:             testAccCheckSelectableValuesDestroyed,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccSelectableValuesConfig(name, groupUUID, `["anz", "apac"]`, false),
+				Config: testAccSelectableValuesConfig(name, `["anz", "apac"]`, false),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.#", "2"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.0", "anz"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "allow_any_value", "false"),
-					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "group_id", groupUUID),
+					resource.TestCheckResourceAttrPair("omni_user_attribute_selectable_values.test", "group_id", "omni_user_group.test", "id"),
 				),
 			},
 			{
-				Config:   testAccSelectableValuesConfig(name, groupUUID, `["anz", "apac"]`, false),
+				Config:   testAccSelectableValuesConfig(name, `["anz", "apac"]`, false),
 				PlanOnly: true,
 			},
 			{
@@ -74,7 +63,7 @@ func TestAccUserAttributeSelectableValues_group(t *testing.T) {
 			{
 				// A changed set, and the wide grant turned on. Both go through
 				// the same PUT, which is why create and update are one call.
-				Config: testAccSelectableValuesConfig(name, groupUUID, `["anz", "apac", "emea"]`, true),
+				Config: testAccSelectableValuesConfig(name, `["anz", "apac", "emea"]`, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "values.#", "3"),
 					resource.TestCheckResourceAttr("omni_user_attribute_selectable_values.test", "allow_any_value", "true"),
@@ -139,34 +128,37 @@ resource "omni_user_attribute_selectable_values" "test" {
 	})
 }
 
-// A mini_uuid in group_id is rejected at plan time rather than by the API.
-//
-// This is the mistake the resource invites: every other group-scoped resource
-// in the provider takes omni_user_group.id, so reaching for it here is the
-// natural thing to do, and the API's answer is a bare "group_id: Invalid UUID"
-// partway through an apply. The validator turns that into a plan-time error
-// that explains itself.
-//
-// Vcf6fCLU is the shape SCIM returns, eight characters, not a real group here.
-// Nothing is created: the plan fails before any request is made.
-func TestAccUserAttributeSelectableValues_groupIDMustBeUUID(t *testing.T) {
+// A UUID in group_id is rejected at plan time. The endpoint used to want one
+// and now answers it with 404 User group does not exist partway through an
+// apply, so anyone upgrading with a hard-coded UUID gets a plan error that
+// names the value to use instead. Nothing is created.
+func TestAccUserAttributeSelectableValues_groupUUIDRejected(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:      testAccSelectableValuesConfig(accIdentifier("sv"), "Vcf6fCLU", `["anz"]`, false),
+				Config: fmt.Sprintf(`
+resource "omni_user_attribute" "test" {
+  name  = %q
+  label = "Acc Selectable"
+  type  = "String"
+}
+
+resource "omni_user_attribute_selectable_values" "test" {
+  user_attribute_id = omni_user_attribute.test.id
+  group_id          = "5a7b9d67-cd43-4724-a9cd-30bf1bbbd847"
+  values            = ["anz"]
+}
+`, accIdentifier("sv")),
 				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`must be a UUID, not the eight-character id`),
+				ExpectError: regexp.MustCompile(`Group UUID no longer accepted`),
 			},
 		},
 	})
 }
 
-func testAccSelectableValuesConfig(name, groupUUID, values string, allowAny bool) string {
-	// No omni_user_group here. A group this created would carry a mini_uuid
-	// as its id, which this endpoint rejects, so the subject has to be a UUID
-	// supplied from outside.
+func testAccSelectableValuesConfig(name, values string, allowAny bool) string {
 	return fmt.Sprintf(`
 resource "omni_user_attribute" "test" {
   name  = %[1]q
@@ -174,13 +166,17 @@ resource "omni_user_attribute" "test" {
   type  = "String"
 }
 
+resource "omni_user_group" "test" {
+  display_name = %[1]q
+}
+
 resource "omni_user_attribute_selectable_values" "test" {
   user_attribute_id = omni_user_attribute.test.id
-  group_id          = %[2]q
-  values            = %[3]s
-  allow_any_value   = %[4]t
+  group_id          = omni_user_group.test.id
+  values            = %[2]s
+  allow_any_value   = %[3]t
 }
-`, name, groupUUID, values, allowAny)
+`, name, values, allowAny)
 }
 
 // Destroying a provisioning is a write, not a delete: the endpoint has no
