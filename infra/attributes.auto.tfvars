@@ -74,23 +74,9 @@ attribute_selectable_values = {
   "analysts-region" = {
     attribute = "region"
 
-    # The Analysts group, by UUID rather than by a key from var.groups.
-    #
-    # This endpoint is the only one in the API that identifies a group by its
-    # UUID primary key; model roles, connection roles, folder and document
-    # permissions and SCIM all take the eight-character mini_uuid, which is
-    # what omni_user_group.id holds. The two are generated independently and
-    # nothing converts between them, so this cannot be a reference. Finding 43.
-    #
-    # Where this came from: the UUID appears on /groups/Vcf6fCLU/Analysts and
-    # on no other page in the instance, it is absent from the Connection
-    # Admins page, and a GET of this endpoint with it answers 200. Omni's
-    # mini_uuid for the same group is Vcf6fCLU.
-    #
-    # It belongs to the group row. Destroying and recreating Analysts makes it
-    # stale, and the apply then fails with a 404 rather than provisioning
-    # something unnoticed.
-    group_uuid = "5a7b9d67-cd43-4724-a9cd-30bf1bbbd847"
+    # A key from var.groups. This was a literal UUID until Omni moved the
+    # endpoint onto the same short group id as everything else. Finding 43.
+    group = "analysts"
 
     values = ["anz", "apac", "emea"]
 
