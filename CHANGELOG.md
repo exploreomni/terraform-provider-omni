@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-30
+
 ### Changed
 
 - `omni_user_attribute_selectable_values.group_id` now takes `omni_user_group.id`.
@@ -145,7 +147,8 @@ request open with Omni's product team.
   values from that provider's attribute mapping. See
   [docs/SCIM-COEXISTENCE.md](docs/SCIM-COEXISTENCE.md).
 
-[Unreleased]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/exploreomni/terraform-provider-omni/releases/tag/v0.1.0
