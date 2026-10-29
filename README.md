@@ -200,6 +200,27 @@ Setting up GitHub Actions for the reference deployment - where state lives,
 which secrets the workflows need, and how a plan is reviewed before it is
 applied - is in [docs/CI-CD.md](docs/CI-CD.md).
 
+The workflows this repository runs are in [`.github/workflows/`](./.github/workflows),
+and the two that drive the reference deployment are a reasonable starting point for
+your own:
+
+| Workflow | What it does |
+| --- | --- |
+| [`terraform-plan.yml`](./.github/workflows/terraform-plan.yml) | Runs `fmt`, `validate` and `plan` on every pull request and posts the plan as a PR comment |
+| [`terraform-apply.yml`](./.github/workflows/terraform-apply.yml) | Applies on merge to `main`, behind an optional approval environment |
+
+Copy both into your repository and adjust:
+
+- `working-directory` and the `paths` filters, which point at `infra/` and `modules/` here.
+- Drop `internal/**` and `main.go` from the `paths` filters, and the `setup-go` step.
+  Those only exist because this repository also builds the provider; yours installs it
+  from the registry during `terraform init`.
+- The `TF_VAR_*` secrets, to match the variables your configuration actually takes.
+- The `environment:` name on the apply job, if you use an approval gate.
+
+The rest of the workflows (`test`, `release`, the acceptance suites) are for developing
+the provider itself and are not needed in a repository that only uses it.
+
 ## Authentication
 
 Generate a token under **Settings > API keys** in Omni.
