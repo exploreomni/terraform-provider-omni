@@ -6,9 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-None of this has reached the Terraform Registry. Ingestion has been broken since
-0.1.0, so the published provider does not include any of it. See
-[hashicorp/terraform-registry-support#73](https://github.com/hashicorp/terraform-registry-support/issues/73).
+## [0.2.0] - 2026-10-29
 
 ### Added
 
@@ -66,9 +64,9 @@ None of this has reached the Terraform Registry. Ingestion has been broken since
 
 ## [0.1.1] - 2026-10-22
 
-Released on GitHub but never ingested by the Terraform Registry, which still
-serves 0.1.0. Nothing in this release is installable; its contents carry forward
-into the next one that reaches the registry.
+Held back from the Terraform Registry by an ingestion fault until 2026-10-29
+([hashicorp/terraform-registry-support#73](https://github.com/hashicorp/terraform-registry-support/issues/73)),
+when it was published.
 
 ### Fixed
 
@@ -142,6 +140,7 @@ request open with Omni's product team.
   values from that provider's attribute mapping. See
   [docs/SCIM-COEXISTENCE.md](docs/SCIM-COEXISTENCE.md).
 
-[Unreleased]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/exploreomni/terraform-provider-omni/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/exploreomni/terraform-provider-omni/releases/tag/v0.1.0
