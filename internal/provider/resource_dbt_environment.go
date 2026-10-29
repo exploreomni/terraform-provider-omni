@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -21,9 +22,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = &dbtEnvironmentResource{}
-	_ resource.ResourceWithConfigure   = &dbtEnvironmentResource{}
-	_ resource.ResourceWithImportState = &dbtEnvironmentResource{}
+	_ resource.Resource                   = &dbtEnvironmentResource{}
+	_ resource.ResourceWithConfigure      = &dbtEnvironmentResource{}
+	_ resource.ResourceWithImportState    = &dbtEnvironmentResource{}
+	_ resource.ResourceWithValidateConfig = &dbtEnvironmentResource{}
 )
 
 // dbtVariableNameValidators enforces the API's naming rule for dbt variables.
@@ -145,6 +147,37 @@ func (r *dbtEnvironmentResource) Schema(_ context.Context, _ resource.SchemaRequ
 					"in both.",
 			},
 		},
+	}
+}
+
+// ValidateConfig rejects a variable named in both maps at plan time. Omni
+// stores a variable as secret or not, so a name in both is a configuration
+// that cannot be applied, and finding that out at plan time costs nothing,
+// where finding it at apply leaves the configuration above it already created.
+//
+// Only the keys are compared. They are known whenever the maps themselves are,
+// even when a value comes from something not yet created.
+func (r *dbtEnvironmentResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config dbtEnvironmentResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if config.Variables.IsNull() || config.Variables.IsUnknown() ||
+		config.SecretVariables.IsNull() || config.SecretVariables.IsUnknown() {
+		return
+	}
+
+	secret := config.SecretVariables.Elements()
+	for name := range config.Variables.Elements() {
+		if _, clash := secret[name]; clash {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("secret_variables"),
+				"Duplicate dbt variable",
+				fmt.Sprintf("The variable %q is set in both variables and secret_variables. Omni "+
+					"stores a variable as either secret or not, so it can only appear in one of them.", name),
+			)
+		}
 	}
 }
 
