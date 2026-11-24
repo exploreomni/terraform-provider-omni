@@ -38,6 +38,8 @@ resource "omni_user" "blob" {
 
   Do not declare Omni's built-in attributes, such as those prefixed `omni_`. The platform populates them and does not return them as user attributes, so Terraform will propose setting them on every plan.
 
+  Every value here is sent as a string, so an attribute created with `multiple_values = true` cannot be set this way: Omni answers `expected array, received string`. Use `omni_user_attribute_value` for those, and for any user Terraform does not own.
+
 ### Read-Only
 
 - `active` (Boolean) Whether the user is active.

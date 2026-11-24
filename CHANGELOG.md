@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `omni_user_attribute_value` - one attribute value on one existing user, and
+  nothing else about them. Writes with a SCIM `PATCH` naming only that key, so
+  it works on users Terraform does not own, found with `data.omni_user`, and
+  destroying it clears the key without deprovisioning the person. Takes
+  `values` for an attribute with `multiple_values = true`, which
+  `omni_user.attributes` cannot set because it sends every value as a string.
+  ([#25](https://github.com/exploreomni/terraform-provider-omni/issues/25))
+  This lifts the known limitation that attribute values could only be set on
+  a managed user.
+
 ## [0.2.1] - 2026-10-30
 
 ### Changed
