@@ -140,6 +140,7 @@ func (p *omniProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewUserResource,
 		NewUserAttributeResource,
 		NewUserAttributeSelectableValuesResource,
+		NewUserAttributeValueResource,
 		NewUserGroupResource,
 		NewUserModelRoleResource,
 		NewUserGroupModelRoleResource,

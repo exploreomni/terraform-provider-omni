@@ -33,6 +33,7 @@ that layer in the same review process as the rest of your infrastructure.
 | `omni_color_palette`         | `/v1/color-palettes`                      |                                                                                |
 | `omni_user_attribute`        | `/v1/user-attributes`                     | Destroy removes the value every user holds, and breaks model SQL and embed URLs naming it     |
 | `omni_user_attribute_selectable_values` | `/v1/user-attributes/{id}/selectable-values` | Values a user or group may switch to. Takes a membership ID, not a user ID       |
+| `omni_user_attribute_value`  | `/scim/v2/users/{id}` (`PATCH`)           | One attribute value on an existing user, including multi-valued ones. Destroy clears the key, not the user |
 | `omni_user`                  | `/scim/v2/users`                          | Organization API key required. Create does not adopt an existing account      |
 | `omni_user_group`            | `/scim/v2/groups`                         | Membership is authoritative unless `member_ids` is left unset                 |
 | `omni_user_model_role`       | `/v1/users/{id}/model-roles`              | Destroy downgrades to `NO_ACCESS` (no delete endpoint exists)                 |

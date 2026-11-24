@@ -76,15 +76,21 @@ the group.
 
 ### Attribute values come from the IdP
 
-This is the one that surprises people. An attribute's value for a person is
-stored on the user through SCIM, so Terraform can only set it on a user it
-manages. The root configuration enforces that: `var.user_attribute_values`
-rejects any email that is not in `var.users`, at plan time, rather than failing
-the apply.
+An attribute's value for a person is stored on the user through SCIM. When an
+IdP provisions that person, the IdP's attribute mapping is the natural source
+for the value, because the value is usually a fact about the person that the
+IdP already holds. It also wins: the IdP rewrites the user on its next sync, so
+a value set any other way does not last.
 
-So for IdP-provisioned users, the value has to come from the IdP's attribute
-mapping. In practice that is the right place for it anyway, because the value
-is usually a fact about the person that the IdP already holds.
+The root configuration's `var.user_attribute_values` sets values through
+`omni_user`, so it only covers users Terraform manages, and rejects any other
+email at plan time.
+
+For people nobody provisions - they sign in on their own or were invited from
+the UI - `omni_user_attribute_value` sets one key on an existing user without
+owning them. Point it at `data.omni_user`, not at an IdP-provisioned person,
+for the reason above. It is also the only way to set a multi-valued attribute
+from Terraform.
 
 What Terraform still owns is the **definition** - the attribute's name, type and
 default. That is the part an access filter keys off, the part that has to exist
